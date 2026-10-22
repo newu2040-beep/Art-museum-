@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Circular inner medallion ring (no rectangular motif inside the artwork) -->
+    <path
+        android:fillColor="#FFFDF8"
+        android:strokeColor="#D5C8B2"
+        android:strokeWidth="1.8"
+        android:pathData="M54,22 A32,32 0 1,1 53.99,22 Z" />
+    <!-- Soft golden sun/horizon circle inside the medallion -->
+    <path
+        android:fillColor="#E9D6B5"
+        android:pathData="M54,32 A14,14 0 1,1 53.99,32 Z" />
+    <!-- Olive / botanical branch stem curving gracefully across the medallion -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#5A634C"
+        android:strokeWidth="2.6"
+        android:strokeLineCap="round"
+        android:pathData="M38,68 C44,58 54,48 68,38" />
+    <!-- Left botanical leaves -->
+    <path
+        android:fillColor="#6D7A5E"
+        android:pathData="M45,58 C39,55 37,49 42,46 C47,48 48,54 45,58 Z" />
+    <path
+        android:fillColor="#77846F"
+        android:pathData="M53,50 C48,46 47,40 52,37 C56,40 56,46 53,50 Z" />
+    <path
+        android:fillColor="#5B664E"
+        android:pathData="M61,43 C58,39 58,34 63,32 C66,35 65,40 61,43 Z" />
+    <!-- Right botanical leaves -->
+    <path
+        android:fillColor="#77846F"
+        android:pathData="M48,60 C54,62 59,59 58,54 C53,54 49,57 48,60 Z" />
+    <path
+        android:fillColor="#6D7A5E"
+        android:pathData="M56,52 C62,54 67,51 66,46 C61,46 57,49 56,52 Z" />
+    <!-- Warm aged-gold olive berry accent -->
+    <path
+        android:fillColor="#B38B58"
+        android:pathData="M50,55 A2.8,2.8 0 1,1 49.99,55 Z" />
+    <path
+        android:fillColor="#C98779"
+        android:pathData="M59,46 A2.4,2.4 0 1,1 58.99,46 Z" />
+</vector>

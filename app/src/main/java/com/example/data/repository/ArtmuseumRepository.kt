@@ -1,0 +1,835 @@
+package com.example.data.repository
+
+import android.content.Context
+import com.example.R
+import com.example.data.model.ActivityNotification
+import com.example.data.model.ArtmuseumThemePalette
+import com.example.data.model.Post
+import com.example.data.model.PostComment
+import com.example.data.model.UserBlock
+import com.example.data.model.UserProfile
+import com.example.data.remote.OperationType
+import com.example.data.remote.handleFirestoreError
+import com.google.firebase.Timestamp
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.DocumentReference
+import com.google.firebase.firestore.DocumentSnapshot
+import com.google.firebase.firestore.FieldValue
+import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.Query
+import com.google.firebase.firestore.QuerySnapshot
+import java.util.UUID
+import kotlin.coroutines.cancellation.CancellationException
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.tasks.await
+
+private fun DocumentReference.observeSnapshots(): Flow<DocumentSnapshot> = callbackFlow {
+    val registration = addSnapshotListener { snapshot, error ->
+        if (error != null) {
+            close(error)
+        } else if (snapshot != null) {
+            trySend(snapshot)
+        }
+    }
+    awaitClose { registration.remove() }
+}
+
+private fun Query.observeSnapshots(): Flow<QuerySnapshot> = callbackFlow {
+    val registration = addSnapshotListener { snapshot, error ->
+        if (error != null) {
+            close(error)
+        } else if (snapshot != null) {
+            trySend(snapshot)
+        }
+    }
+    awaitClose { registration.remove() }
+}
+
+class ArtmuseumRepository(
+    private val db: FirebaseFirestore,
+    private val auth: FirebaseAuth = FirebaseAuth.getInstance()
+) {
+    constructor(context: Context) : this(
+        FirebaseFirestore.getInstance(
+            context.applicationContext.getString(R.string.firestore_database_id)
+        )
+    )
+
+    private fun requireUserId(): String {
+        return auth.currentUser?.uid
+            ?: throw IllegalStateException("User must be signed in with Google before writing to Firestore.")
+    }
+
+    // --- 1. User Profile ---
+
+    fun observeUserProfile(userId: String): Flow<UserProfile?> {
+        val docRef = db.collection("users").document(userId)
+        return docRef.observeSnapshots()
+            .map { snapshot -> UserProfile.fromSnapshot(snapshot) }
+            .catch { error ->
+                if (error is Exception) handleFirestoreError(error, OperationType.GET, docRef.path)
+                throw error
+            }
+    }
+
+    suspend fun getUserProfile(userId: String): Result<UserProfile?> = runCatching {
+        val docRef = db.collection("users").document(userId)
+        try {
+            val snap = docRef.get().await()
+            UserProfile.fromSnapshot(snap)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.GET, docRef.path)
+            throw e
+        }
+    }
+
+    suspend fun createOrInitializeProfile(
+        displayName: String,
+        bio: String,
+        age: Int,
+        gender: String,
+        photoURL: String = "preset:avatar_sophia",
+        themePreference: String = "Cream"
+    ): Result<UserProfile> = runCatching {
+        val uid = requireUserId()
+        val docRef = db.collection("users").document(uid)
+        try {
+            val existingSnap = docRef.get().await()
+            val existingProfile = UserProfile.fromSnapshot(existingSnap)
+            if (existingProfile != null && existingProfile.accountStatus == "active") {
+                return@runCatching existingProfile
+            }
+            val profile = UserProfile(
+                documentId = uid,
+                uid = uid,
+                displayName = displayName.trim().ifEmpty { "Sophia" }.take(60),
+                photoURL = photoURL.ifBlank { "preset:avatar_sophia" },
+                bio = bio.trim().ifEmpty {
+                    "Just a girl who finds beauty in meaningful conversations, art, nature and real connections. \uD83C\uDF3F"
+                }.take(500),
+                age = age.coerceIn(13, 120),
+                gender = if (gender == "Male") "Male" else "Female",
+                themePreference = ArtmuseumThemePalette.fromName(themePreference).label,
+                notificationsEnabled = true,
+                profileVisibility = "public",
+                accountStatus = "active",
+                postCount = 4,
+                followerCount = 2600,
+                followingCount = 312,
+                isVerified = true
+            )
+            docRef.set(profile.toCreateMap()).await()
+            UserProfile.fromSnapshot(docRef.get().await()) ?: profile
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.WRITE, docRef.path)
+            throw e
+        }
+    }
+
+    suspend fun updateProfile(
+        displayName: String,
+        bio: String,
+        age: Int,
+        gender: String,
+        photoURL: String,
+        themePreference: String,
+        notificationsEnabled: Boolean,
+        profileVisibility: String
+    ): Result<Unit> = runCatching {
+        val uid = requireUserId()
+        val docRef = db.collection("users").document(uid)
+        try {
+            val updates = mapOf<String, Any>(
+                "displayName" to displayName.trim().ifEmpty { "Sophia" }.take(60),
+                "bio" to bio.trim().take(500),
+                "age" to age.coerceIn(13, 120),
+                "gender" to if (gender == "Male") "Male" else "Female",
+                "photoURL" to photoURL.ifBlank { "preset:avatar_sophia" },
+                "themePreference" to ArtmuseumThemePalette.fromName(themePreference).label,
+                "notificationsEnabled" to notificationsEnabled,
+                "profileVisibility" to if (profileVisibility == "private") "private" else "public",
+                "updatedAt" to FieldValue.serverTimestamp()
+            )
+            docRef.update(updates).await()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.UPDATE, docRef.path)
+            throw e
+        }
+    }
+
+    suspend fun updateThemePreference(themeName: String): Result<Unit> = runCatching {
+        val uid = requireUserId()
+        val docRef = db.collection("users").document(uid)
+        try {
+            docRef.update(
+                mapOf(
+                    "themePreference" to ArtmuseumThemePalette.fromName(themeName).label,
+                    "updatedAt" to FieldValue.serverTimestamp()
+                )
+            ).await()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.UPDATE, docRef.path)
+            throw e
+        }
+    }
+
+    fun observePublicUsers(): Flow<List<UserProfile>> {
+        val path = "users"
+        return db.collection(path)
+            .whereEqualTo("profileVisibility", "public")
+            .limit(40)
+            .observeSnapshots()
+            .map { snapshot ->
+                snapshot.documents.mapNotNull { UserProfile.fromSnapshot(it) }
+                    .filter { it.accountStatus == "active" }
+            }
+            .catch { error ->
+                if (error is Exception) handleFirestoreError(error, OperationType.LIST, path)
+                throw error
+            }
+    }
+
+    // --- 2. Posts & Real-Time Feed ---
+
+    fun observePublicPosts(limitCount: Long = 40L): Flow<List<Post>> {
+        val path = "posts"
+        return db.collection(path)
+            .whereEqualTo("visibility", "public")
+            .limit(limitCount)
+            .observeSnapshots()
+            .map { snapshot ->
+                snapshot.documents.mapNotNull { Post.fromSnapshot(it) }
+                    .filter { it.status == "active" }
+                    .sortedByDescending { it.createdAt ?: Timestamp(0, 0) }
+            }
+            .catch { error ->
+                if (error is Exception) handleFirestoreError(error, OperationType.LIST, path)
+                throw error
+            }
+    }
+
+    fun observeUserPosts(authorId: String): Flow<List<Post>> {
+        val path = "posts"
+        return db.collection(path)
+            .whereEqualTo("authorId", authorId)
+            .limit(40)
+            .observeSnapshots()
+            .map { snapshot ->
+                snapshot.documents.mapNotNull { Post.fromSnapshot(it) }
+                    .filter { it.status == "active" }
+                    .sortedByDescending { it.createdAt ?: Timestamp(0, 0) }
+            }
+            .catch { error ->
+                if (error is Exception) handleFirestoreError(error, OperationType.LIST, path)
+                throw error
+            }
+    }
+
+    suspend fun getPostById(postId: String): Result<Post?> = runCatching {
+        val docRef = db.collection("posts").document(postId)
+        try {
+            val snap = docRef.get().await()
+            Post.fromSnapshot(snap)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.GET, docRef.path)
+            throw e
+        }
+    }
+
+    suspend fun createPost(
+        authorProfile: UserProfile,
+        text: String,
+        imageURL: String = "",
+        imageCaption: String = "",
+        topics: List<String> = emptyList(),
+        themeName: String = "Cream",
+        visibility: String = "public"
+    ): Result<String> = runCatching {
+        val uid = requireUserId()
+        val postId = "post_${UUID.randomUUID().toString().replace("-", "").take(20)}"
+        val docRef = db.collection("posts").document(postId)
+        try {
+            val post = Post(
+                documentId = postId,
+                postId = postId,
+                authorId = uid,
+                authorNameSnapshot = authorProfile.displayName.ifBlank { "Sophia" },
+                authorPhotoSnapshot = authorProfile.photoURL.ifBlank { "preset:avatar_sophia" },
+                authorAgeSnapshot = authorProfile.age.coerceIn(13, 120),
+                authorGenderSnapshot = if (authorProfile.gender == "Male") "Male" else "Female",
+                text = text.trim().take(10000),
+                imageURL = imageURL,
+                imageCaption = imageCaption.trim().take(500),
+                topics = topics,
+                themeName = themeName,
+                likeCount = 0,
+                commentCount = 0,
+                visibility = if (visibility == "private") "private" else "public",
+                status = "active"
+            )
+            docRef.set(post.toCreateMap()).await()
+            postId
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.CREATE, docRef.path)
+            throw e
+        }
+    }
+
+    suspend fun updatePost(
+        postId: String,
+        text: String,
+        imageCaption: String,
+        topics: List<String>,
+        themeName: String
+    ): Result<Unit> = runCatching {
+        requireUserId()
+        val docRef = db.collection("posts").document(postId)
+        try {
+            val cleanTopics = topics.map { it.trim().take(40) }.filter { it.isNotEmpty() }.take(10)
+            val updates = mapOf<String, Any>(
+                "text" to text.trim().take(10000),
+                "imageCaption" to imageCaption.trim().take(500),
+                "topics" to cleanTopics,
+                "themeName" to ArtmuseumThemePalette.fromName(themeName).label,
+                "updatedAt" to FieldValue.serverTimestamp()
+            )
+            docRef.update(updates).await()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.UPDATE, docRef.path)
+            throw e
+        }
+    }
+
+    suspend fun deletePost(postId: String): Result<Unit> = runCatching {
+        requireUserId()
+        val docRef = db.collection("posts").document(postId)
+        try {
+            docRef.delete().await()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.DELETE, docRef.path)
+            throw e
+        }
+    }
+
+    // --- 3. Idempotent Likes ---
+
+    suspend fun isPostLiked(postId: String, userId: String): Boolean {
+        val docRef = db.collection("posts").document(postId).collection("likes").document(userId)
+        return try {
+            docRef.get().await().exists()
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    suspend fun toggleLike(
+        post: Post,
+        actorProfile: UserProfile
+    ): Result<Boolean> = runCatching {
+        val uid = requireUserId()
+        val postRef = db.collection("posts").document(post.postId)
+        val likeRef = postRef.collection("likes").document(uid)
+        try {
+            val existingLike = likeRef.get().await()
+            val freshPostSnap = postRef.get().await()
+            val currentLikes = (freshPostSnap.getLong("likeCount") ?: post.likeCount.toLong()).toInt()
+            if (existingLike.exists()) {
+                likeRef.delete().await()
+                postRef.update(
+                    mapOf(
+                        "likeCount" to (currentLikes - 1).coerceAtLeast(0),
+                        "updatedAt" to FieldValue.serverTimestamp()
+                    )
+                ).await()
+                false
+            } else {
+                likeRef.set(
+                    mapOf(
+                        "uid" to uid,
+                        "postId" to post.postId,
+                        "createdAt" to FieldValue.serverTimestamp()
+                    )
+                ).await()
+                postRef.update(
+                    mapOf(
+                        "likeCount" to (currentLikes + 1),
+                        "updatedAt" to FieldValue.serverTimestamp()
+                    )
+                ).await()
+                if (post.authorId.isNotBlank() && post.authorId != uid) {
+                    createNotification(
+                        recipientUid = post.authorId,
+                        actorProfile = actorProfile,
+                        type = "like",
+                        postId = post.postId,
+                        message = "${actorProfile.displayName} appreciated your exhibit."
+                    )
+                }
+                true
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.WRITE, likeRef.path)
+            throw e
+        }
+    }
+
+    // --- 4. Saved Posts (Bookmarks) ---
+
+    fun observeSavedPostIds(userId: String): Flow<Set<String>> {
+        val path = "users/$userId/savedPosts"
+        return db.collection("users").document(userId).collection("savedPosts")
+            .whereEqualTo("uid", userId)
+            .observeSnapshots()
+            .map { snapshot ->
+                snapshot.documents.mapNotNull { it.getString("postId") ?: it.id }.toSet()
+            }
+            .catch { error ->
+                if (error is Exception) handleFirestoreError(error, OperationType.LIST, path)
+                throw error
+            }
+    }
+
+    suspend fun toggleSavePost(postId: String): Result<Boolean> = runCatching {
+        val uid = requireUserId()
+        val savedRef = db.collection("users").document(uid).collection("savedPosts").document(postId)
+        try {
+            val snap = savedRef.get().await()
+            if (snap.exists()) {
+                savedRef.delete().await()
+                false
+            } else {
+                savedRef.set(
+                    mapOf(
+                        "uid" to uid,
+                        "postId" to postId,
+                        "savedAt" to FieldValue.serverTimestamp()
+                    )
+                ).await()
+                true
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.WRITE, savedRef.path)
+            throw e
+        }
+    }
+
+    // --- 5. Comments ---
+
+    fun observeComments(postId: String): Flow<List<PostComment>> {
+        val path = "posts/$postId/comments"
+        return db.collection("posts").document(postId).collection("comments")
+            .whereEqualTo("status", "active")
+            .limit(50)
+            .observeSnapshots()
+            .map { snapshot ->
+                snapshot.documents.mapNotNull { PostComment.fromSnapshot(it) }
+                    .sortedBy { it.createdAt ?: Timestamp.now() }
+            }
+            .catch { error ->
+                if (error is Exception) handleFirestoreError(error, OperationType.LIST, path)
+                throw error
+            }
+    }
+
+    suspend fun addComment(
+        post: Post,
+        authorProfile: UserProfile,
+        text: String
+    ): Result<String> = runCatching {
+        val uid = requireUserId()
+        val trimmed = text.trim().take(2000)
+        require(trimmed.isNotEmpty()) { "Comment cannot be empty" }
+        val commentId = "cmt_${UUID.randomUUID().toString().replace("-", "").take(20)}"
+        val postRef = db.collection("posts").document(post.postId)
+        val commentRef = postRef.collection("comments").document(commentId)
+        try {
+            val payload = mapOf<String, Any>(
+                "commentId" to commentId,
+                "postId" to post.postId,
+                "authorId" to uid,
+                "authorNameSnapshot" to authorProfile.displayName.ifBlank { "Arjun" }.take(60),
+                "authorPhotoSnapshot" to authorProfile.photoURL.ifBlank { "preset:avatar_daniel" },
+                "text" to trimmed,
+                "likeCount" to 0,
+                "status" to "active",
+                "createdAt" to FieldValue.serverTimestamp(),
+                "updatedAt" to FieldValue.serverTimestamp()
+            )
+            commentRef.set(payload).await()
+            val freshPost = postRef.get().await()
+            val currentComments = (freshPost.getLong("commentCount") ?: post.commentCount.toLong()).toInt()
+            postRef.update(
+                mapOf(
+                    "commentCount" to (currentComments + 1),
+                    "updatedAt" to FieldValue.serverTimestamp()
+                )
+            ).await()
+            if (post.authorId.isNotBlank() && post.authorId != uid) {
+                createNotification(
+                    recipientUid = post.authorId,
+                    actorProfile = authorProfile,
+                    type = "comment",
+                    postId = post.postId,
+                    message = "${authorProfile.displayName} reflected on your post: \"${trimmed.take(60)}\""
+                )
+            }
+            commentId
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.CREATE, commentRef.path)
+            throw e
+        }
+    }
+
+    suspend fun deleteComment(postId: String, commentId: String): Result<Unit> = runCatching {
+        requireUserId()
+        val postRef = db.collection("posts").document(postId)
+        val commentRef = postRef.collection("comments").document(commentId)
+        try {
+            commentRef.delete().await()
+            val freshPost = postRef.get().await()
+            if (freshPost.exists()) {
+                val currentComments = (freshPost.getLong("commentCount") ?: 1L).toInt()
+                postRef.update(
+                    mapOf(
+                        "commentCount" to (currentComments - 1).coerceAtLeast(0),
+                        "updatedAt" to FieldValue.serverTimestamp()
+                    )
+                ).await()
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.DELETE, commentRef.path)
+            throw e
+        }
+    }
+
+    // --- 6. Notifications ---
+
+    fun observeNotifications(userId: String): Flow<List<ActivityNotification>> {
+        val path = "users/$userId/notifications"
+        return db.collection("users").document(userId).collection("notifications")
+            .whereEqualTo("recipientUid", userId)
+            .limit(40)
+            .observeSnapshots()
+            .map { snapshot ->
+                snapshot.documents.mapNotNull { ActivityNotification.fromSnapshot(it) }
+                    .sortedByDescending { it.createdAt ?: Timestamp(0, 0) }
+            }
+            .catch { error ->
+                if (error is Exception) handleFirestoreError(error, OperationType.LIST, path)
+                throw error
+            }
+    }
+
+    suspend fun createNotification(
+        recipientUid: String,
+        actorProfile: UserProfile,
+        type: String,
+        postId: String = "",
+        message: String
+    ): Result<String> = runCatching {
+        val uid = requireUserId()
+        val notifId = "ntf_${UUID.randomUUID().toString().replace("-", "").take(20)}"
+        val notifRef = db.collection("users").document(recipientUid)
+            .collection("notifications").document(notifId)
+        try {
+            val payload = mapOf<String, Any?>(
+                "notificationId" to notifId,
+                "recipientUid" to recipientUid,
+                "actorId" to uid,
+                "actorName" to actorProfile.displayName.ifBlank { "Artmuseum" }.take(60),
+                "actorPhotoURL" to actorProfile.photoURL.ifBlank { "preset:avatar_sophia" },
+                "type" to if (type in listOf("like", "comment", "welcome", "system")) type else "system",
+                "postId" to postId.takeIf { it.isNotBlank() },
+                "message" to message.trim().take(300),
+                "isRead" to false,
+                "deliveryStatus" to "delivered",
+                "createdAt" to FieldValue.serverTimestamp()
+            ).filterValues { it != null } as Map<String, Any>
+            notifRef.set(payload).await()
+            notifId
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.CREATE, notifRef.path)
+            throw e
+        }
+    }
+
+    suspend fun markNotificationRead(notificationId: String): Result<Unit> = runCatching {
+        val uid = requireUserId()
+        val notifRef = db.collection("users").document(uid)
+            .collection("notifications").document(notificationId)
+        try {
+            notifRef.update(
+                mapOf(
+                    "isRead" to true,
+                    "deliveryStatus" to "read",
+                    "readAt" to FieldValue.serverTimestamp()
+                )
+            ).await()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.UPDATE, notifRef.path)
+            throw e
+        }
+    }
+
+    // --- 7. Trust & Safety: Blocks, Reports, Account Deletion ---
+
+    fun observeBlockedUsers(userId: String): Flow<List<UserBlock>> {
+        val path = "users/$userId/blocks"
+        return db.collection("users").document(userId).collection("blocks")
+            .whereEqualTo("blockerUid", userId)
+            .observeSnapshots()
+            .map { snapshot ->
+                snapshot.documents.mapNotNull { UserBlock.fromSnapshot(it) }
+            }
+            .catch { error ->
+                if (error is Exception) handleFirestoreError(error, OperationType.LIST, path)
+                throw error
+            }
+    }
+
+    suspend fun blockUser(blockedUid: String, blockedName: String): Result<Unit> = runCatching {
+        val uid = requireUserId()
+        val blockRef = db.collection("users").document(uid).collection("blocks").document(blockedUid)
+        try {
+            blockRef.set(
+                mapOf(
+                    "blockerUid" to uid,
+                    "blockedUid" to blockedUid,
+                    "blockedName" to blockedName.trim().take(60),
+                    "createdAt" to FieldValue.serverTimestamp()
+                )
+            ).await()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.CREATE, blockRef.path)
+            throw e
+        }
+    }
+
+    suspend fun unblockUser(blockedUid: String): Result<Unit> = runCatching {
+        val uid = requireUserId()
+        val blockRef = db.collection("users").document(uid).collection("blocks").document(blockedUid)
+        try {
+            blockRef.delete().await()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.DELETE, blockRef.path)
+            throw e
+        }
+    }
+
+    suspend fun submitReport(
+        targetId: String,
+        targetType: String,
+        reason: String
+    ): Result<String> = runCatching {
+        val uid = requireUserId()
+        val reportId = "rep_${UUID.randomUUID().toString().replace("-", "").take(20)}"
+        val reportRef = db.collection("reports").document(reportId)
+        try {
+            reportRef.set(
+                mapOf(
+                    "reportId" to reportId,
+                    "reporterUid" to uid,
+                    "targetId" to targetId.take(128),
+                    "targetType" to if (targetType in listOf("post", "comment", "user")) targetType else "post",
+                    "reason" to reason.trim().ifEmpty { "Inappropriate content" }.take(500),
+                    "status" to "open",
+                    "createdAt" to FieldValue.serverTimestamp()
+                )
+            ).await()
+            reportId
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.CREATE, reportRef.path)
+            throw e
+        }
+    }
+
+    suspend fun deleteAccountAndOwnContent(): Result<Unit> = runCatching {
+        val uid = requireUserId()
+        val userRef = db.collection("users").document(uid)
+        try {
+            val ownPosts = db.collection("posts").whereEqualTo("authorId", uid).get().await()
+            for (doc in ownPosts.documents) {
+                doc.reference.delete().await()
+            }
+            userRef.delete().await()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.DELETE, userRef.path)
+            throw e
+        }
+    }
+
+    // --- 8. Initial Curated Exhibits Seeder for Newly Provisioned Museum ---
+
+    suspend fun ensureInitialExhibitsIfEmpty(currentProfile: UserProfile) {
+        val uid = auth.currentUser?.uid ?: return
+        try {
+            val existingPosts = db.collection("posts")
+                .whereEqualTo("visibility", "public")
+                .limit(1)
+                .get()
+                .await()
+            if (!existingPosts.isEmpty) return
+
+            val firstPostId = "post_sophia_villa_${uid.take(8)}"
+            val firstPostRef = db.collection("posts").document(firstPostId)
+            val firstPost = Post(
+                documentId = firstPostId,
+                postId = firstPostId,
+                authorId = uid,
+                authorNameSnapshot = currentProfile.displayName.ifBlank { "Sophia" },
+                authorPhotoSnapshot = currentProfile.photoURL.ifBlank { "preset:avatar_sophia" },
+                authorAgeSnapshot = currentProfile.age,
+                authorGenderSnapshot = currentProfile.gender,
+                text = "Sometimes the most beautiful things in life aren't things at all, but moments, people and feelings. \uD83C\uDF3F\n\nIt's not about the perfect life, but about finding beauty in the imperfect moments that make us feel alive.",
+                imageURL = "preset:coastal_villa",
+                imageCaption = "Golden hour over the quiet lakeside villa",
+                topics = listOf("Life", "Love", "Peace"),
+                themeName = "Cream",
+                likeCount = 0,
+                commentCount = 0,
+                visibility = "public",
+                status = "active"
+            )
+            firstPostRef.set(firstPost.toCreateMap()).await()
+
+            // Add the initial comment shown in the Post Detail mockup
+            val commentId = "cmt_arjun_${uid.take(8)}"
+            firstPostRef.collection("comments").document(commentId).set(
+                mapOf(
+                    "commentId" to commentId,
+                    "postId" to firstPostId,
+                    "authorId" to uid,
+                    "authorNameSnapshot" to "Arjun",
+                    "authorPhotoSnapshot" to "preset:avatar_daniel",
+                    "text" to "This is so true. Beautifully said. \u2728",
+                    "likeCount" to 48,
+                    "status" to "active",
+                    "createdAt" to FieldValue.serverTimestamp(),
+                    "updatedAt" to FieldValue.serverTimestamp()
+                )
+            ).await()
+            firstPostRef.update(
+                mapOf(
+                    "commentCount" to 1,
+                    "updatedAt" to FieldValue.serverTimestamp()
+                )
+            ).await()
+
+            // Second post from the Home Feed mockup
+            val secondPostId = "post_daniel_courage_${uid.take(8)}"
+            val secondPost = Post(
+                documentId = secondPostId,
+                postId = secondPostId,
+                authorId = uid,
+                authorNameSnapshot = "Daniel",
+                authorPhotoSnapshot = "preset:avatar_daniel",
+                authorAgeSnapshot = 28,
+                authorGenderSnapshot = "Male",
+                text = "Courage isn't the absence of fear, it's moving forward despite it. Every mountain looks impossible until you take the first quiet step into the valley.",
+                imageURL = "preset:alpine_valley",
+                imageCaption = "Morning light across the alpine ridge",
+                topics = listOf("Courage", "Growth"),
+                themeName = "Sage",
+                likeCount = 0,
+                commentCount = 0,
+                visibility = "public",
+                status = "active"
+            )
+            db.collection("posts").document(secondPostId).set(secondPost.toCreateMap()).await()
+
+            // Additional gallery exhibits for the Profile 2x2 grid
+            val thirdPostId = "post_sophia_portrait_${uid.take(8)}"
+            val thirdPost = Post(
+                documentId = thirdPostId,
+                postId = thirdPostId,
+                authorId = uid,
+                authorNameSnapshot = currentProfile.displayName.ifBlank { "Sophia" },
+                authorPhotoSnapshot = currentProfile.photoURL.ifBlank { "preset:avatar_sophia" },
+                authorAgeSnapshot = currentProfile.age,
+                authorGenderSnapshot = currentProfile.gender,
+                text = "In a world that rewards noise, choosing gentleness and honest reflection is its own form of art.",
+                imageURL = "preset:portrait_study",
+                imageCaption = "Study in warm afternoon light",
+                topics = listOf("Art", "Peace"),
+                themeName = "Cream",
+                likeCount = 0,
+                commentCount = 0,
+                visibility = "public",
+                status = "active"
+            )
+            db.collection("posts").document(thirdPostId).set(thirdPost.toCreateMap()).await()
+
+            val fourthPostId = "post_sophia_meadow_${uid.take(8)}"
+            val fourthPost = Post(
+                documentId = fourthPostId,
+                postId = fourthPostId,
+                authorId = uid,
+                authorNameSnapshot = currentProfile.displayName.ifBlank { "Sophia" },
+                authorPhotoSnapshot = currentProfile.photoURL.ifBlank { "preset:avatar_sophia" },
+                authorAgeSnapshot = currentProfile.age,
+                authorGenderSnapshot = currentProfile.gender,
+                text = "Reading beneath wildflowers reminds me that growth is never loud—it happens quietly, season after season.",
+                imageURL = "preset:meadow_reading",
+                imageCaption = "Afternoon reading in the meadow",
+                topics = listOf("Growth", "Life"),
+                themeName = "Rose",
+                likeCount = 0,
+                commentCount = 0,
+                visibility = "public",
+                status = "active"
+            )
+            db.collection("posts").document(fourthPostId).set(fourthPost.toCreateMap()).await()
+
+            // Create welcome notification
+            createNotification(
+                recipientUid = uid,
+                actorProfile = currentProfile,
+                type = "welcome",
+                postId = firstPostId,
+                message = "Welcome to Artmuseum — a quiet gallery for sincere thoughts and artwork."
+            )
+        } catch (_: Exception) {
+            // Best-effort initial seed
+        }
+    }
+}

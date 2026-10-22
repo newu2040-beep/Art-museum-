@@ -1,0 +1,77 @@
+{
+  "project_info": {
+    "project_number": "395252933444",
+    "firebase_url": "https://datesme-347b7-default-rtdb.firebaseio.com",
+    "project_id": "datesme-347b7",
+    "storage_bucket": "datesme-347b7.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:395252933444:android:e52c7355d47fc0072b6d11",
+        "android_client_info": {
+          "package_name": "com.artmuseum.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "395252933444-k10aj0ka9uqjuftpobh1ffj5v7t7hgen.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyATu5hiQTv-f_Sb03hTd4oUwOiOz9x6tWA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "395252933444-k10aj0ka9uqjuftpobh1ffj5v7t7hgen.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:395252933444:android:fb2c04e536ac055a2b6d11",
+        "android_client_info": {
+          "package_name": "com.milesare.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "395252933444-549vn6vlgbql1ltodgmtspdl4mon2310.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.milesare.app",
+            "certificate_hash": "1666e4c268794c48025cb98b04f2b7dcb78ec571"
+          }
+        },
+        {
+          "client_id": "395252933444-k10aj0ka9uqjuftpobh1ffj5v7t7hgen.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyATu5hiQTv-f_Sb03hTd4oUwOiOz9x6tWA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "395252933444-k10aj0ka9uqjuftpobh1ffj5v7t7hgen.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

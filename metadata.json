@@ -1,0 +1,6 @@
+{
+  "name": "Artmuseum",
+  "description": "A modern, art-inspired social platform for sharing honest thoughts, experiences, and artwork.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

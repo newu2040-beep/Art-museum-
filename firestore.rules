@@ -1,0 +1,374 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Pillar 4.1: Global default-deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Global hardened primitives
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidTheme(theme) {
+      return theme is string && theme.size() <= 20 &&
+        theme in ['Cream', 'Sage', 'Blue', 'Rose', 'Lavender', 'Terracotta', 'Midnight'];
+    }
+
+    // 1. UserProfile Validation Blueprint
+    function isValidUserProfile(data, userId) {
+      return data.keys().hasAll(['uid', 'displayName', 'age', 'gender', 'profileVisibility', 'accountStatus', 'createdAt']) &&
+        data.keys().hasOnly([
+          'uid', 'displayName', 'photoURL', 'bio', 'age', 'gender',
+          'themePreference', 'notificationsEnabled', 'profileVisibility',
+          'accountStatus', 'postCount', 'followerCount', 'followingCount',
+          'isVerified', 'createdAt', 'updatedAt'
+        ]) &&
+        data.uid is string && data.uid.size() >= 1 && data.uid.size() <= 128 &&
+        data.uid == userId && data.uid == request.auth.uid &&
+        data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 60 &&
+        (!('photoURL' in data) || data.photoURL == null || (data.photoURL is string && data.photoURL.size() <= 100000)) &&
+        (!('bio' in data) || data.bio == null || (data.bio is string && data.bio.size() <= 500)) &&
+        data.age is int && data.age >= 13 && data.age <= 120 &&
+        data.gender is string && data.gender.size() <= 10 && data.gender in ['Male', 'Female'] &&
+        (!('themePreference' in data) || data.themePreference == null || isValidTheme(data.themePreference)) &&
+        (!('notificationsEnabled' in data) || data.notificationsEnabled == null || data.notificationsEnabled is bool) &&
+        data.profileVisibility is string && data.profileVisibility.size() <= 10 && data.profileVisibility in ['public', 'private'] &&
+        data.accountStatus is string && data.accountStatus.size() <= 10 && data.accountStatus in ['active', 'deleted'] &&
+        (!('postCount' in data) || data.postCount == null || (data.postCount is int && data.postCount >= 0)) &&
+        (!('followerCount' in data) || data.followerCount == null || (data.followerCount is int && data.followerCount >= 0)) &&
+        (!('followingCount' in data) || data.followingCount == null || (data.followingCount is int && data.followingCount >= 0)) &&
+        (!('isVerified' in data) || data.isVerified == null || data.isVerified is bool) &&
+        data.createdAt is timestamp && data.createdAt <= request.time &&
+        (!('updatedAt' in data) || data.updatedAt == null || (data.updatedAt is timestamp && data.updatedAt <= request.time));
+    }
+
+    // 2. Post Validation Blueprint
+    function isValidPost(data, postId) {
+      return data.keys().hasAll([
+          'postId', 'authorId', 'authorNameSnapshot', 'text', 'topics',
+          'likeCount', 'commentCount', 'visibility', 'status', 'createdAt'
+        ]) &&
+        data.keys().hasOnly([
+          'postId', 'authorId', 'authorNameSnapshot', 'authorPhotoSnapshot',
+          'authorAgeSnapshot', 'authorGenderSnapshot', 'text', 'imageURL',
+          'imageStoragePath', 'imageCaption', 'topics', 'themeName',
+          'likeCount', 'commentCount', 'visibility', 'status', 'createdAt', 'updatedAt'
+        ]) &&
+        data.postId is string && data.postId.size() >= 1 && data.postId.size() <= 128 && data.postId == postId &&
+        data.authorId is string && data.authorId.size() >= 1 && data.authorId.size() <= 128 &&
+        data.authorNameSnapshot is string && data.authorNameSnapshot.size() >= 1 && data.authorNameSnapshot.size() <= 60 &&
+        (!('authorPhotoSnapshot' in data) || data.authorPhotoSnapshot == null || (data.authorPhotoSnapshot is string && data.authorPhotoSnapshot.size() <= 100000)) &&
+        (!('authorAgeSnapshot' in data) || data.authorAgeSnapshot == null || (data.authorAgeSnapshot is int && data.authorAgeSnapshot >= 13 && data.authorAgeSnapshot <= 120)) &&
+        (!('authorGenderSnapshot' in data) || data.authorGenderSnapshot == null || (data.authorGenderSnapshot is string && data.authorGenderSnapshot.size() <= 10 && data.authorGenderSnapshot in ['Male', 'Female'])) &&
+        data.text is string && data.text.size() <= 10000 &&
+        (!('imageURL' in data) || data.imageURL == null || (data.imageURL is string && data.imageURL.size() <= 100000)) &&
+        (!('imageStoragePath' in data) || data.imageStoragePath == null || (data.imageStoragePath is string && data.imageStoragePath.size() <= 500)) &&
+        (!('imageCaption' in data) || data.imageCaption == null || (data.imageCaption is string && data.imageCaption.size() <= 500)) &&
+        data.topics is list && data.topics.size() <= 10 &&
+        (data.topics.size() == 0 || (data.topics[0] is string && data.topics[0].size() <= 40)) &&
+        (!('themeName' in data) || data.themeName == null || isValidTheme(data.themeName)) &&
+        data.likeCount is int && data.likeCount >= 0 &&
+        data.commentCount is int && data.commentCount >= 0 &&
+        data.visibility is string && data.visibility.size() <= 10 && data.visibility in ['public', 'private'] &&
+        data.status is string && data.status.size() <= 10 && data.status in ['active', 'archived'] &&
+        data.createdAt is timestamp && data.createdAt <= request.time &&
+        (!('updatedAt' in data) || data.updatedAt == null || (data.updatedAt is timestamp && data.updatedAt <= request.time));
+    }
+
+    // 3. PostLike Validation Blueprint
+    function isValidPostLike(data, postId, likeUid) {
+      return data.keys().hasAll(['uid', 'postId', 'createdAt']) &&
+        data.keys().hasOnly(['uid', 'postId', 'createdAt']) &&
+        data.uid is string && data.uid.size() >= 1 && data.uid.size() <= 128 &&
+        data.uid == likeUid && data.uid == request.auth.uid &&
+        data.postId is string && data.postId.size() >= 1 && data.postId.size() <= 128 && data.postId == postId &&
+        data.createdAt is timestamp && data.createdAt <= request.time;
+    }
+
+    // 4. PostComment Validation Blueprint
+    function isValidPostComment(data, postId, commentId) {
+      return data.keys().hasAll(['commentId', 'postId', 'authorId', 'authorNameSnapshot', 'text', 'status', 'createdAt']) &&
+        data.keys().hasOnly([
+          'commentId', 'postId', 'authorId', 'authorNameSnapshot', 'authorPhotoSnapshot',
+          'text', 'likeCount', 'status', 'createdAt', 'updatedAt'
+        ]) &&
+        data.commentId is string && data.commentId.size() >= 1 && data.commentId.size() <= 128 && data.commentId == commentId &&
+        data.postId is string && data.postId.size() >= 1 && data.postId.size() <= 128 && data.postId == postId &&
+        data.authorId is string && data.authorId.size() >= 1 && data.authorId.size() <= 128 && data.authorId == request.auth.uid &&
+        data.authorNameSnapshot is string && data.authorNameSnapshot.size() >= 1 && data.authorNameSnapshot.size() <= 60 &&
+        (!('authorPhotoSnapshot' in data) || data.authorPhotoSnapshot == null || (data.authorPhotoSnapshot is string && data.authorPhotoSnapshot.size() <= 100000)) &&
+        data.text is string && data.text.size() >= 1 && data.text.size() <= 2000 &&
+        (!('likeCount' in data) || data.likeCount == null || (data.likeCount is int && data.likeCount >= 0)) &&
+        data.status is string && data.status.size() <= 10 && data.status in ['active', 'deleted'] &&
+        data.createdAt is timestamp && data.createdAt <= request.time &&
+        (!('updatedAt' in data) || data.updatedAt == null || (data.updatedAt is timestamp && data.updatedAt <= request.time));
+    }
+
+    // 5. SavedPost Validation Blueprint
+    function isValidSavedPost(data, userId, postId) {
+      return data.keys().hasAll(['uid', 'postId', 'savedAt']) &&
+        data.keys().hasOnly(['uid', 'postId', 'savedAt']) &&
+        data.uid is string && data.uid.size() >= 1 && data.uid.size() <= 128 &&
+        data.uid == userId && data.uid == request.auth.uid &&
+        data.postId is string && data.postId.size() >= 1 && data.postId.size() <= 128 && data.postId == postId &&
+        data.savedAt is timestamp && data.savedAt <= request.time;
+    }
+
+    // 6. ActivityNotification Validation Blueprint
+    function isValidNotification(data, userId, notificationId) {
+      return data.keys().hasAll([
+          'notificationId', 'recipientUid', 'actorId', 'actorName',
+          'type', 'message', 'isRead', 'deliveryStatus', 'createdAt'
+        ]) &&
+        data.keys().hasOnly([
+          'notificationId', 'recipientUid', 'actorId', 'actorName', 'actorPhotoURL',
+          'type', 'postId', 'message', 'isRead', 'deliveryStatus', 'createdAt', 'readAt'
+        ]) &&
+        data.notificationId is string && data.notificationId.size() >= 1 && data.notificationId.size() <= 128 && data.notificationId == notificationId &&
+        data.recipientUid is string && data.recipientUid.size() >= 1 && data.recipientUid.size() <= 128 && data.recipientUid == userId &&
+        data.actorId is string && data.actorId.size() >= 1 && data.actorId.size() <= 128 &&
+        data.actorName is string && data.actorName.size() >= 1 && data.actorName.size() <= 60 &&
+        (!('actorPhotoURL' in data) || data.actorPhotoURL == null || (data.actorPhotoURL is string && data.actorPhotoURL.size() <= 100000)) &&
+        data.type is string && data.type.size() <= 15 && data.type in ['like', 'comment', 'welcome', 'system'] &&
+        (!('postId' in data) || data.postId == null || (data.postId is string && data.postId.size() <= 128)) &&
+        data.message is string && data.message.size() >= 1 && data.message.size() <= 300 &&
+        data.isRead is bool &&
+        data.deliveryStatus is string && data.deliveryStatus.size() <= 15 && data.deliveryStatus in ['delivered', 'read'] &&
+        data.createdAt is timestamp && data.createdAt <= request.time &&
+        (!('readAt' in data) || data.readAt == null || (data.readAt is timestamp && data.readAt <= request.time));
+    }
+
+    // 7. UserBlock Validation Blueprint
+    function isValidUserBlock(data, userId, blockedUid) {
+      return data.keys().hasAll(['blockerUid', 'blockedUid', 'createdAt']) &&
+        data.keys().hasOnly(['blockerUid', 'blockedUid', 'blockedName', 'createdAt']) &&
+        data.blockerUid is string && data.blockerUid.size() >= 1 && data.blockerUid.size() <= 128 &&
+        data.blockerUid == userId && data.blockerUid == request.auth.uid &&
+        data.blockedUid is string && data.blockedUid.size() >= 1 && data.blockedUid.size() <= 128 && data.blockedUid == blockedUid &&
+        (!('blockedName' in data) || data.blockedName == null || (data.blockedName is string && data.blockedName.size() <= 60)) &&
+        data.createdAt is timestamp && data.createdAt <= request.time;
+    }
+
+    // 8. ContentReport Validation Blueprint
+    function isValidContentReport(data, reportId) {
+      return data.keys().hasAll(['reportId', 'reporterUid', 'targetId', 'targetType', 'reason', 'status', 'createdAt']) &&
+        data.keys().hasOnly(['reportId', 'reporterUid', 'targetId', 'targetType', 'reason', 'status', 'createdAt']) &&
+        data.reportId is string && data.reportId.size() >= 1 && data.reportId.size() <= 128 && data.reportId == reportId &&
+        data.reporterUid is string && data.reporterUid.size() >= 1 && data.reporterUid.size() <= 128 && data.reporterUid == request.auth.uid &&
+        data.targetId is string && data.targetId.size() >= 1 && data.targetId.size() <= 128 &&
+        data.targetType is string && data.targetType.size() <= 15 && data.targetType in ['post', 'comment', 'user'] &&
+        data.reason is string && data.reason.size() >= 1 && data.reason.size() <= 500 &&
+        data.status is string && data.status.size() <= 15 && data.status == 'open' &&
+        data.createdAt is timestamp && data.createdAt <= request.time;
+    }
+
+    // Collection 1: /users/{userId}
+    match /users/{userId} {
+      allow get: if isSignedIn() && isValidId(userId) &&
+        (request.auth.uid == userId || existing().profileVisibility == 'public');
+
+      allow list: if isSignedIn() &&
+        (existing().uid == request.auth.uid || existing().profileVisibility == 'public');
+
+      allow create: if isSignedIn() && isValidId(userId) &&
+        request.auth.uid == userId &&
+        isValidUserProfile(incoming(), userId);
+
+      allow update: if isSignedIn() && isValidId(userId) &&
+        request.auth.uid == userId &&
+        isValidUserProfile(incoming(), userId) &&
+        incoming().uid == existing().uid &&
+        incoming().createdAt == existing().createdAt &&
+        existing().accountStatus == 'active' &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'displayName', 'photoURL', 'bio', 'age', 'gender',
+          'themePreference', 'notificationsEnabled', 'profileVisibility',
+          'accountStatus', 'postCount', 'followerCount', 'followingCount', 'updatedAt'
+        ]);
+
+      allow delete: if isSignedIn() && isValidId(userId) && request.auth.uid == userId;
+
+      // Subcollection 5: /users/{userId}/savedPosts/{postId}
+      match /savedPosts/{postId} {
+        allow get: if isSignedIn() && isValidId(userId) && isValidId(postId) &&
+          request.auth.uid == userId;
+
+        allow list: if isSignedIn() && request.auth.uid == userId &&
+          existing().uid == request.auth.uid;
+
+        allow create: if isSignedIn() && isValidId(userId) && isValidId(postId) &&
+          request.auth.uid == userId &&
+          isValidSavedPost(incoming(), userId, postId) &&
+          exists(/databases/$(database)/documents/posts/$(postId));
+
+        allow update: if false;
+
+        allow delete: if isSignedIn() && isValidId(userId) && isValidId(postId) &&
+          request.auth.uid == userId;
+      }
+
+      // Subcollection 6: /users/{userId}/notifications/{notificationId}
+      match /notifications/{notificationId} {
+        allow get: if isSignedIn() && isValidId(userId) && isValidId(notificationId) &&
+          request.auth.uid == userId;
+
+        allow list: if isSignedIn() && request.auth.uid == userId &&
+          existing().recipientUid == request.auth.uid;
+
+        allow create: if isSignedIn() && isValidId(userId) && isValidId(notificationId) &&
+          incoming().actorId == request.auth.uid &&
+          isValidNotification(incoming(), userId, notificationId);
+
+        allow update: if isSignedIn() && isValidId(userId) && isValidId(notificationId) &&
+          request.auth.uid == userId &&
+          isValidNotification(incoming(), userId, notificationId) &&
+          incoming().notificationId == existing().notificationId &&
+          incoming().recipientUid == existing().recipientUid &&
+          incoming().actorId == existing().actorId &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['isRead', 'deliveryStatus', 'readAt']);
+
+        allow delete: if isSignedIn() && isValidId(userId) && isValidId(notificationId) &&
+          request.auth.uid == userId;
+      }
+
+      // Subcollection 7: /users/{userId}/blocks/{blockedUid}
+      match /blocks/{blockedUid} {
+        allow get: if isSignedIn() && isValidId(userId) && isValidId(blockedUid) &&
+          request.auth.uid == userId;
+
+        allow list: if isSignedIn() && request.auth.uid == userId &&
+          existing().blockerUid == request.auth.uid;
+
+        allow create: if isSignedIn() && isValidId(userId) && isValidId(blockedUid) &&
+          request.auth.uid == userId &&
+          isValidUserBlock(incoming(), userId, blockedUid);
+
+        allow update: if false;
+
+        allow delete: if isSignedIn() && isValidId(userId) && isValidId(blockedUid) &&
+          request.auth.uid == userId;
+      }
+    }
+
+    // Collection 2: /posts/{postId}
+    match /posts/{postId} {
+      allow get: if isSignedIn() && isValidId(postId) &&
+        (existing().visibility == 'public' || existing().authorId == request.auth.uid);
+
+      allow list: if isSignedIn() &&
+        (existing().visibility == 'public' || existing().authorId == request.auth.uid);
+
+      allow create: if isSignedIn() && isValidId(postId) &&
+        incoming().authorId == request.auth.uid &&
+        incoming().likeCount == 0 &&
+        incoming().commentCount == 0 &&
+        incoming().status == 'active' &&
+        isValidPost(incoming(), postId);
+
+      allow update: if isSignedIn() && isValidId(postId) &&
+        isValidPost(incoming(), postId) &&
+        incoming().postId == existing().postId &&
+        incoming().authorId == existing().authorId &&
+        incoming().createdAt == existing().createdAt &&
+        existing().status == 'active' && (
+          // Action 1: Author editing their own post content or metadata
+          (existing().authorId == request.auth.uid &&
+            incoming().likeCount == existing().likeCount &&
+            incoming().commentCount == existing().commentCount &&
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'authorNameSnapshot', 'authorPhotoSnapshot', 'authorAgeSnapshot', 'authorGenderSnapshot',
+              'text', 'imageURL', 'imageStoragePath', 'imageCaption', 'topics', 'themeName',
+              'visibility', 'status', 'updatedAt'
+            ])) ||
+          // Action 2: Bounded +/- 1 counter adjustment on public posts during like/comment actions
+          (existing().visibility == 'public' &&
+            (incoming().likeCount == existing().likeCount ||
+             incoming().likeCount == existing().likeCount + 1 ||
+             incoming().likeCount == existing().likeCount - 1) &&
+            (incoming().commentCount == existing().commentCount ||
+             incoming().commentCount == existing().commentCount + 1 ||
+             incoming().commentCount == existing().commentCount - 1) &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['likeCount', 'commentCount', 'updatedAt']))
+        );
+
+      allow delete: if isSignedIn() && isValidId(postId) &&
+        existing().authorId == request.auth.uid;
+
+      // Subcollection 3: /posts/{postId}/likes/{likeUid}
+      match /likes/{likeUid} {
+        allow get: if isSignedIn() && isValidId(postId) && isValidId(likeUid) &&
+          request.auth.uid == likeUid;
+
+        allow list: if isSignedIn() &&
+          existing().uid == request.auth.uid;
+
+        allow create: if isSignedIn() && isValidId(postId) && isValidId(likeUid) &&
+          request.auth.uid == likeUid &&
+          isValidPostLike(incoming(), postId, likeUid) &&
+          exists(/databases/$(database)/documents/posts/$(postId));
+
+        allow update: if false;
+
+        allow delete: if isSignedIn() && isValidId(postId) && isValidId(likeUid) &&
+          request.auth.uid == likeUid;
+      }
+
+      // Subcollection 4: /posts/{postId}/comments/{commentId}
+      match /comments/{commentId} {
+        allow get: if isSignedIn() && isValidId(postId) && isValidId(commentId) &&
+          (existing().status == 'active' || existing().authorId == request.auth.uid);
+
+        allow list: if isSignedIn() &&
+          (existing().status == 'active' || existing().authorId == request.auth.uid);
+
+        allow create: if isSignedIn() && isValidId(postId) && isValidId(commentId) &&
+          incoming().authorId == request.auth.uid &&
+          incoming().status == 'active' &&
+          isValidPostComment(incoming(), postId, commentId) &&
+          exists(/databases/$(database)/documents/posts/$(postId));
+
+        allow update: if isSignedIn() && isValidId(postId) && isValidId(commentId) &&
+          existing().authorId == request.auth.uid &&
+          isValidPostComment(incoming(), postId, commentId) &&
+          incoming().commentId == existing().commentId &&
+          incoming().postId == existing().postId &&
+          incoming().authorId == existing().authorId &&
+          incoming().createdAt == existing().createdAt &&
+          existing().status == 'active' &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['text', 'status', 'updatedAt']);
+
+        allow delete: if isSignedIn() && isValidId(postId) && isValidId(commentId) &&
+          existing().authorId == request.auth.uid;
+      }
+    }
+
+    // Collection 8: /reports/{reportId}
+    match /reports/{reportId} {
+      allow get: if isSignedIn() && isValidId(reportId) &&
+        existing().reporterUid == request.auth.uid;
+
+      allow list: if isSignedIn() &&
+        existing().reporterUid == request.auth.uid;
+
+      allow create: if isSignedIn() && isValidId(reportId) &&
+        isValidContentReport(incoming(), reportId);
+
+      allow update, delete: if false;
+    }
+  }
+}

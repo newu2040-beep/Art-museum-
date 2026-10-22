@@ -1,0 +1,175 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Public/personal museum profile for an authenticated user (no PII stored).",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Owner Firebase Auth UID." },
+        "displayName": { "type": "string", "description": "Display name (1-60 chars)." },
+        "photoURL": { "type": "string", "description": "Avatar URL, preset identifier, or compact data URI." },
+        "bio": { "type": "string", "description": "Personal bio (0-500 chars)." },
+        "age": { "type": "integer", "description": "Validated integer age (13-120)." },
+        "gender": { "type": "string", "enum": ["Male", "Female"], "description": "Gender selection restricted to Male or Female." },
+        "themePreference": { "type": "string", "enum": ["Cream", "Sage", "Blue", "Rose", "Lavender", "Terracotta", "Midnight"], "description": "Selected visual theme." },
+        "notificationsEnabled": { "type": "boolean", "description": "Whether activity notifications are enabled." },
+        "profileVisibility": { "type": "string", "enum": ["public", "private"], "description": "Profile visibility mode." },
+        "accountStatus": { "type": "string", "enum": ["active", "deleted"], "description": "Account lifecycle status." },
+        "postCount": { "type": "integer", "description": "Number of published posts." },
+        "followerCount": { "type": "integer", "description": "Follower count." },
+        "followingCount": { "type": "integer", "description": "Following count." },
+        "isVerified": { "type": "boolean", "description": "Museum verification badge." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Creation server timestamp (FieldValue.serverTimestamp())." },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Last update server timestamp (FieldValue.serverTimestamp())." }
+      },
+      "required": ["uid", "displayName", "age", "gender", "profileVisibility", "accountStatus", "createdAt"]
+    },
+    "Post": {
+      "title": "Post",
+      "description": "A museum exhibit post containing thoughts and optional artwork.",
+      "type": "object",
+      "properties": {
+        "postId": { "type": "string", "description": "Unique post identifier." },
+        "authorId": { "type": "string", "description": "UID of the post author." },
+        "authorNameSnapshot": { "type": "string", "description": "Snapshot of author display name." },
+        "authorPhotoSnapshot": { "type": "string", "description": "Snapshot of author photo URL." },
+        "authorAgeSnapshot": { "type": "integer", "description": "Snapshot of author age." },
+        "authorGenderSnapshot": { "type": "string", "enum": ["Male", "Female"], "description": "Snapshot of author gender." },
+        "text": { "type": "string", "description": "Long-form post body text." },
+        "imageURL": { "type": "string", "description": "Artwork URL, preset key, or compact data URI." },
+        "imageStoragePath": { "type": "string", "description": "Storage path reference if applicable." },
+        "imageCaption": { "type": "string", "description": "Optional artwork caption." },
+        "topics": { "type": "array", "description": "Topic tags (up to 10 strings)." },
+        "themeName": { "type": "string", "enum": ["Cream", "Sage", "Blue", "Rose", "Lavender", "Terracotta", "Midnight"], "description": "Card palette theme." },
+        "likeCount": { "type": "integer", "description": "Derived count of likes." },
+        "commentCount": { "type": "integer", "description": "Derived count of comments." },
+        "visibility": { "type": "string", "enum": ["public", "private"], "description": "Post visibility." },
+        "status": { "type": "string", "enum": ["active", "archived"], "description": "Moderation/lifecycle status." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server creation timestamp." },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server update timestamp." }
+      },
+      "required": ["postId", "authorId", "authorNameSnapshot", "text", "topics", "likeCount", "commentCount", "visibility", "status", "createdAt"]
+    },
+    "PostLike": {
+      "title": "PostLike",
+      "description": "Idempotent per-user like record on a post.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "UID of the user who liked the post." },
+        "postId": { "type": "string", "description": "ID of the liked post." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp when liked." }
+      },
+      "required": ["uid", "postId", "createdAt"]
+    },
+    "PostComment": {
+      "title": "PostComment",
+      "description": "User comment on a museum post.",
+      "type": "object",
+      "properties": {
+        "commentId": { "type": "string", "description": "Unique comment ID." },
+        "postId": { "type": "string", "description": "Parent post ID." },
+        "authorId": { "type": "string", "description": "Comment author UID." },
+        "authorNameSnapshot": { "type": "string", "description": "Author display name." },
+        "authorPhotoSnapshot": { "type": "string", "description": "Author avatar URL." },
+        "text": { "type": "string", "description": "Comment text (1-2000 chars)." },
+        "likeCount": { "type": "integer", "description": "Comment like count." },
+        "status": { "type": "string", "enum": ["active", "deleted"], "description": "Comment status." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server creation timestamp." },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server update timestamp." }
+      },
+      "required": ["commentId", "postId", "authorId", "authorNameSnapshot", "text", "status", "createdAt"]
+    },
+    "SavedPost": {
+      "title": "SavedPost",
+      "description": "Bookmark record for a post saved by a user.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Owner user UID." },
+        "postId": { "type": "string", "description": "Saved post ID." },
+        "savedAt": { "type": "string", "format": "date-time", "description": "Server timestamp when bookmarked." }
+      },
+      "required": ["uid", "postId", "savedAt"]
+    },
+    "ActivityNotification": {
+      "title": "ActivityNotification",
+      "description": "In-app activity notification for likes, comments, or museum updates.",
+      "type": "object",
+      "properties": {
+        "notificationId": { "type": "string", "description": "Notification document ID." },
+        "recipientUid": { "type": "string", "description": "Recipient user UID." },
+        "actorId": { "type": "string", "description": "UID of the actor triggering the notification." },
+        "actorName": { "type": "string", "description": "Display name of the actor." },
+        "actorPhotoURL": { "type": "string", "description": "Avatar of the actor." },
+        "type": { "type": "string", "enum": ["like", "comment", "welcome", "system"], "description": "Notification category." },
+        "postId": { "type": "string", "description": "Associated post ID if applicable." },
+        "message": { "type": "string", "description": "Notification summary text." },
+        "isRead": { "type": "boolean", "description": "Whether the recipient has read this notification." },
+        "deliveryStatus": { "type": "string", "enum": ["delivered", "read"], "description": "Delivery status." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server creation timestamp." },
+        "readAt": { "type": "string", "format": "date-time", "description": "Server read timestamp." }
+      },
+      "required": ["notificationId", "recipientUid", "actorId", "actorName", "type", "message", "isRead", "deliveryStatus", "createdAt"]
+    },
+    "UserBlock": {
+      "title": "UserBlock",
+      "description": "Record of a user blocked by the current user.",
+      "type": "object",
+      "properties": {
+        "blockerUid": { "type": "string", "description": "UID of the user initiating the block." },
+        "blockedUid": { "type": "string", "description": "UID of the blocked user." },
+        "blockedName": { "type": "string", "description": "Display name of the blocked user." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp." }
+      },
+      "required": ["blockerUid", "blockedUid", "createdAt"]
+    },
+    "ContentReport": {
+      "title": "ContentReport",
+      "description": "Trust & safety moderation report submitted by an authenticated user.",
+      "type": "object",
+      "properties": {
+        "reportId": { "type": "string", "description": "Report document ID." },
+        "reporterUid": { "type": "string", "description": "UID of the reporting user." },
+        "targetId": { "type": "string", "description": "ID of the reported post, comment, or user." },
+        "targetType": { "type": "string", "enum": ["post", "comment", "user"], "description": "Type of reported entity." },
+        "reason": { "type": "string", "description": "Reason for reporting." },
+        "status": { "type": "string", "enum": ["open", "reviewed"], "description": "Moderation status." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp." }
+      },
+      "required": ["reportId", "reporterUid", "targetId", "targetType", "reason", "status", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "User profiles collection."
+    },
+    "/posts/{postId}": {
+      "schema": { "$ref": "#/entities/Post" },
+      "description": "Top-level museum posts feed collection."
+    },
+    "/posts/{postId}/likes/{likeUid}": {
+      "schema": { "$ref": "#/entities/PostLike" },
+      "description": "Per-user idempotent likes subcollection under each post."
+    },
+    "/posts/{postId}/comments/{commentId}": {
+      "schema": { "$ref": "#/entities/PostComment" },
+      "description": "Comments subcollection under each post."
+    },
+    "/users/{userId}/savedPosts/{postId}": {
+      "schema": { "$ref": "#/entities/SavedPost" },
+      "description": "User-scoped bookmarked posts subcollection."
+    },
+    "/users/{userId}/notifications/{notificationId}": {
+      "schema": { "$ref": "#/entities/ActivityNotification" },
+      "description": "User-scoped activity notifications subcollection."
+    },
+    "/users/{userId}/blocks/{blockedUid}": {
+      "schema": { "$ref": "#/entities/UserBlock" },
+      "description": "User-scoped blocked accounts subcollection."
+    },
+    "/reports/{reportId}": {
+      "schema": { "$ref": "#/entities/ContentReport" },
+      "description": "Moderation reports collection."
+    }
+  }
+}

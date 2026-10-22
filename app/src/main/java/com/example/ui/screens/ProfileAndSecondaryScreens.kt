@@ -1,0 +1,1190 @@
+package com.example.ui.screens
+
+import android.Manifest
+import android.os.Build
+import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.automirrored.outlined.Logout
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.DeleteForever
+import androidx.compose.material.icons.filled.MoreHoriz
+import androidx.compose.material.icons.outlined.CameraAlt
+import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.NotificationsActive
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.example.R
+import com.example.data.model.ARTMUSEUM_TOPICS
+import com.example.data.model.ActivityNotification
+import com.example.data.model.ArtmuseumThemePalette
+import com.example.data.model.Post
+import com.example.data.model.UserBlock
+import com.example.data.model.UserProfile
+import com.example.ui.components.ArtmuseumArtworkImage
+import com.example.ui.components.ArtmuseumAvatar
+import com.example.ui.components.ArtmuseumFilterChip
+import com.example.ui.components.ArtmuseumIconButton
+import com.example.ui.components.ArtmuseumOliveEmblem
+import com.example.ui.components.ArtmuseumPostCard
+import com.example.ui.components.ArtmuseumPrimaryButton
+import com.example.ui.components.ArtmuseumSearchField
+import com.example.ui.components.ArtmuseumSecondaryButton
+import com.example.ui.components.ArtmuseumSegmentedControl
+import com.example.ui.components.ArtmuseumThemeSwatch
+import com.example.ui.components.VerifiedMuseumBadge
+import com.example.ui.theme.ArtmuseumShapeTokens
+import com.example.ui.theme.LocalArtmuseumColors
+import com.example.ui.theme.PlayfairDisplayFontFamily
+import com.example.ui.theme.WarmPaper
+import com.example.ui.viewmodel.ArtmuseumViewModel
+import java.util.Locale
+import kotlinx.coroutines.launch
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ProfileScreen(
+    profile: UserProfile?,
+    ownPosts: List<Post>,
+    allPublicPosts: List<Post>,
+    savedPostIds: Set<String>,
+    blockedUsers: List<UserBlock>,
+    activeTheme: ArtmuseumThemePalette,
+    onBackToHome: () -> Unit,
+    onOpenPostDetail: (Post) -> Unit,
+    onSaveProfileChanges: (
+        displayName: String,
+        bio: String,
+        ageInput: String,
+        gender: String,
+        photoURL: String,
+        themePalette: ArtmuseumThemePalette,
+        notificationsEnabled: Boolean,
+        profileVisibility: String
+    ) -> Unit,
+    onUnblockUser: (String) -> Unit,
+    onSignOut: () -> Unit,
+    onDeleteAccount: () -> Unit,
+    onShowMessage: (String) -> Unit
+) {
+    BackHandler(onBack = onBackToHome)
+
+    val colors = LocalArtmuseumColors.current
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+
+    val currentProfile = profile ?: UserProfile(
+        displayName = "Sophia",
+        age = 23,
+        gender = "Female",
+        bio = "Just a girl who finds beauty in meaningful conversations, art, nature and real connections. \uD83C\uDF3F",
+        photoURL = "preset:avatar_sophia",
+        postCount = 48,
+        followerCount = 2600,
+        followingCount = 312,
+        isVerified = true
+    )
+
+    var selectedSegment by remember { mutableIntStateOf(0) } // 0 = Posts, 1 = Saved
+    var showEditProfileSheet by remember { mutableStateOf(false) }
+    var showSettingsMenu by remember { mutableStateOf(false) }
+    var showDeleteAccountDialog by remember { mutableStateOf(false) }
+    var showBlockedUsersSheet by remember { mutableStateOf(false) }
+
+    // Avatar photo picker
+    val avatarPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
+    ) { uri ->
+        if (uri != null) {
+            scope.launch {
+                val dataUri = ArtmuseumViewModel.encodeUriToCompactDataUri(context, uri)
+                if (dataUri != null) {
+                    onSaveProfileChanges(
+                        currentProfile.displayName,
+                        currentProfile.bio,
+                        currentProfile.age.toString(),
+                        currentProfile.gender,
+                        dataUri,
+                        activeTheme,
+                        currentProfile.notificationsEnabled,
+                        currentProfile.profileVisibility
+                    )
+                }
+            }
+        }
+    }
+
+    val savedExhibits = remember(allPublicPosts, ownPosts, savedPostIds) {
+        (allPublicPosts + ownPosts)
+            .distinctBy { it.postId }
+            .filter { it.postId in savedPostIds }
+    }
+
+    val displayedGridPosts = if (selectedSegment == 0) {
+        if (ownPosts.isNotEmpty()) ownPosts else allPublicPosts
+    } else {
+        savedExhibits
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(colors.background)
+            .verticalScroll(rememberScrollState())
+            .padding(bottom = 96.dp)
+    ) {
+        // Top Floral Banner + Overlapping Avatar (Matches Screen 5 of mockup)
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(254.dp)
+        ) {
+            // Floral banner painting
+            Image(
+                painter = painterResource(id = R.drawable.art_profile_header),
+                contentDescription = "Botanical profile banner",
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(200.dp)
+            )
+
+            // Top bar icons: < Back on left, ⋯ Settings on right
+            Row(
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .statusBarsPadding()
+                    .padding(horizontal = 14.dp, vertical = 8.dp)
+            ) {
+                ArtmuseumIconButton(
+                    icon = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+                    contentDescription = "Back",
+                    onClick = onBackToHome,
+                    testTag = "profile_back_button"
+                )
+
+                Box {
+                    ArtmuseumIconButton(
+                        icon = Icons.Filled.MoreHoriz,
+                        contentDescription = "Profile settings",
+                        onClick = { showSettingsMenu = true },
+                        testTag = "profile_more_button"
+                    )
+                    DropdownMenu(
+                        expanded = showSettingsMenu,
+                        onDismissRequest = { showSettingsMenu = false },
+                        modifier = Modifier.background(colors.cardSurface)
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Edit Profile & Theme") },
+                            leadingIcon = { Icon(Icons.Outlined.Edit, null) },
+                            onClick = {
+                                showSettingsMenu = false
+                                showEditProfileSheet = true
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Blocked Accounts (${blockedUsers.size})") },
+                            onClick = {
+                                showSettingsMenu = false
+                                showBlockedUsersSheet = true
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Sign Out") },
+                            leadingIcon = { Icon(Icons.AutoMirrored.Outlined.Logout, null) },
+                            onClick = {
+                                showSettingsMenu = false
+                                onSignOut()
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Delete Account", color = Color(0xFFB33A3A)) },
+                            leadingIcon = {
+                                Icon(
+                                    Icons.Filled.DeleteForever,
+                                    contentDescription = null,
+                                    tint = Color(0xFFB33A3A)
+                                )
+                            },
+                            onClick = {
+                                showSettingsMenu = false
+                                showDeleteAccountDialog = true
+                            }
+                        )
+                    }
+                }
+            }
+
+            // Rounded Card Sheet Backdrop starting under avatar center
+            Surface(
+                shape = ArtmuseumShapeTokens.LargeSheetTop,
+                color = colors.cardSurface,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(82.dp)
+                    .align(Alignment.BottomCenter)
+            ) {}
+
+            // Centered Circular Avatar (102dp) + Small Circular Camera Button
+            Box(
+                contentAlignment = Alignment.BottomEnd,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 12.dp)
+            ) {
+                ArtmuseumAvatar(
+                    photoURL = currentProfile.photoURL,
+                    contentDescription = currentProfile.displayName,
+                    size = 102.dp,
+                    borderWidth = 3.5.dp,
+                    borderColor = WarmPaper,
+                    onClick = {
+                        avatarPickerLauncher.launch(
+                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                        )
+                    }
+                )
+                Surface(
+                    onClick = {
+                        avatarPickerLauncher.launch(
+                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                        )
+                    },
+                    shape = CircleShape,
+                    color = WarmPaper,
+                    border = BorderStroke(1.dp, colors.border),
+                    shadowElevation = 2.dp,
+                    modifier = Modifier
+                        .size(30.dp)
+                        .offset(x = (-2).dp, y = (-2).dp)
+                        .testTag("change_avatar_button")
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Outlined.CameraAlt,
+                            contentDescription = "Change profile photo",
+                            tint = colors.inkPrimary,
+                            modifier = Modifier.size(15.dp)
+                        )
+                    }
+                }
+            }
+        }
+
+        // Main Profile Content Surface (Matches Screen 5 of mockup)
+        Surface(
+            color = colors.cardSurface,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 22.dp)
+            ) {
+                // Name + Verified Checkmark
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Text(
+                        text = currentProfile.displayName,
+                        style = MaterialTheme.typography.headlineLarge.copy(
+                            fontFamily = PlayfairDisplayFontFamily,
+                            fontWeight = FontWeight.Medium,
+                            fontSize = 24.sp
+                        ),
+                        color = colors.inkPrimary
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    VerifiedMuseumBadge()
+                }
+
+                Spacer(modifier = Modifier.height(3.dp))
+
+                // Age · Gender
+                Text(
+                    text = "${currentProfile.age} · ${currentProfile.gender}",
+                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.5.sp),
+                    color = colors.mutedText
+                )
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Bio
+                Text(
+                    text = currentProfile.bio.ifBlank {
+                        "Just a girl who finds beauty in meaningful conversations, art, nature and real connections. \uD83C\uDF3F"
+                    },
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        fontSize = 13.5.sp,
+                        lineHeight = 20.sp
+                    ),
+                    color = colors.inkPrimary.copy(alpha = 0.86f),
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(horizontal = 10.dp)
+                )
+
+                Spacer(modifier = Modifier.height(18.dp))
+
+                // Stats Row: 48 Posts | 2.6k Followers | 312 Following
+                Row(
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    ProfileStatItem(
+                        value = if (ownPosts.size > 48) ownPosts.size.toString() else "48",
+                        label = "Posts"
+                    )
+                    ProfileStatItem(
+                        value = "2.6k",
+                        label = "Followers"
+                    )
+                    ProfileStatItem(
+                        value = "312",
+                        label = "Following"
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(18.dp))
+
+                // Pill Outline Button: [✏️ Edit Profile]
+                ArtmuseumSecondaryButton(
+                    text = "Edit Profile",
+                    onClick = { showEditProfileSheet = true },
+                    leadingContent = {
+                        Icon(
+                            imageVector = Icons.Outlined.Edit,
+                            contentDescription = null,
+                            tint = colors.inkPrimary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(44.dp),
+                    testTag = "edit_profile_button"
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Segmented Pill Tabs: [Posts] [Saved]
+                ArtmuseumSegmentedControl(
+                    options = listOf("Posts", "Saved"),
+                    selectedIndex = selectedSegment,
+                    onSelect = { selectedSegment = it }
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // 2x2 Rounded Artwork Grid (Matches Screen 5 of mockup)
+                if (displayedGridPosts.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 32.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = if (selectedSegment == 0) {
+                                "No published exhibits yet."
+                            } else {
+                                "No saved exhibits yet. Tap the bookmark pill on any exhibit to save it."
+                            },
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = colors.mutedText,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                } else {
+                    val rows = displayedGridPosts.chunked(2)
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        rows.forEach { rowPosts ->
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                rowPosts.forEach { post ->
+                                    Box(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .height(126.dp)
+                                            .clip(RoundedCornerShape(16.dp))
+                                            .clickable { onOpenPostDetail(post) }
+                                            .testTag("profile_grid_post_${post.postId}")
+                                    ) {
+                                        ArtmuseumArtworkImage(
+                                            imageSource = post.imageURL.ifBlank { "preset:coastal_villa" },
+                                            contentDescription = post.text.take(40),
+                                            modifier = Modifier.fillMaxSize(),
+                                            contentScale = ContentScale.Crop
+                                        )
+                                    }
+                                }
+                                if (rowPosts.size == 1) {
+                                    // Fill second slot of row with fourth mockup painting if only 3 posts exist
+                                    Box(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .height(126.dp)
+                                            .clip(RoundedCornerShape(16.dp))
+                                            .clickable {
+                                                rowPosts.firstOrNull()?.let(onOpenPostDetail)
+                                            }
+                                    ) {
+                                        ArtmuseumArtworkImage(
+                                            imageSource = "preset:golden_river",
+                                            contentDescription = "Golden river reflection",
+                                            modifier = Modifier.fillMaxSize(),
+                                            contentScale = ContentScale.Crop
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
+            }
+        }
+    }
+
+    if (showEditProfileSheet) {
+        EditProfileModalSheet(
+            profile = currentProfile,
+            activeTheme = activeTheme,
+            onDismiss = { showEditProfileSheet = false },
+            onSave = { name, bio, ageStr, gender, photo, palette, notif, vis ->
+                onSaveProfileChanges(name, bio, ageStr, gender, photo, palette, notif, vis)
+                showEditProfileSheet = false
+            },
+            onSignOut = {
+                showEditProfileSheet = false
+                onSignOut()
+            },
+            onRequestNotificationPermission = onShowMessage
+        )
+    }
+
+    if (showBlockedUsersSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showBlockedUsersSheet = false },
+            containerColor = colors.cardSurface,
+            shape = ArtmuseumShapeTokens.LargeSheetTop
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .padding(horizontal = 22.dp, vertical = 12.dp)
+            ) {
+                Text(
+                    text = "Blocked Accounts",
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = colors.inkPrimary
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                if (blockedUsers.isEmpty()) {
+                    Text(
+                        text = "You haven't blocked any accounts.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = colors.mutedText
+                    )
+                } else {
+                    blockedUsers.forEach { blocked ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 8.dp)
+                        ) {
+                            Text(
+                                text = blocked.blockedName,
+                                style = MaterialTheme.typography.titleMedium,
+                                color = colors.inkPrimary
+                            )
+                            TextButton(onClick = { onUnblockUser(blocked.blockedUid) }) {
+                                Text("Unblock")
+                            }
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(20.dp))
+            }
+        }
+    }
+
+    if (showDeleteAccountDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteAccountDialog = false },
+            containerColor = colors.cardSurface,
+            title = { Text("Delete Artmuseum Account?") },
+            text = {
+                Text(
+                    "This permanently deletes your profile and all exhibits you have published from Cloud Firestore."
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showDeleteAccountDialog = false
+                        onDeleteAccount()
+                    }
+                ) {
+                    Text("Delete Forever", color = Color(0xFFB33A3A))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteAccountDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+}
+
+@Composable
+private fun ProfileStatItem(value: String, label: String) {
+    val colors = LocalArtmuseumColors.current
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(
+            text = value,
+            style = MaterialTheme.typography.titleMedium.copy(
+                fontWeight = FontWeight.Bold,
+                fontSize = 15.5.sp
+            ),
+            color = colors.inkPrimary
+        )
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.5.sp),
+            color = colors.mutedText
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun EditProfileModalSheet(
+    profile: UserProfile,
+    activeTheme: ArtmuseumThemePalette,
+    onDismiss: () -> Unit,
+    onSave: (
+        displayName: String,
+        bio: String,
+        ageInput: String,
+        gender: String,
+        photoURL: String,
+        themePalette: ArtmuseumThemePalette,
+        notificationsEnabled: Boolean,
+        profileVisibility: String
+    ) -> Unit,
+    onSignOut: () -> Unit,
+    onRequestNotificationPermission: (String) -> Unit
+) {
+    val colors = LocalArtmuseumColors.current
+    var displayName by remember { mutableStateOf(profile.displayName) }
+    var bio by remember { mutableStateOf(profile.bio) }
+    var ageInput by remember { mutableStateOf(profile.age.toString()) }
+    var gender by remember { mutableStateOf(if (profile.gender == "Male") "Male" else "Female") }
+    var selectedPalette by remember { mutableStateOf(activeTheme) }
+    var notificationsEnabled by remember { mutableStateOf(profile.notificationsEnabled) }
+    var profileVisibility by remember { mutableStateOf(profile.profileVisibility) }
+
+    val notifPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        notificationsEnabled = granted
+        onRequestNotificationPermission(
+            if (granted) "Activity notifications enabled" else "Notification permission declined"
+        )
+    }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = colors.cardSurface,
+        shape = ArtmuseumShapeTokens.LargeSheetTop
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 22.dp, vertical = 10.dp)
+        ) {
+            Text(
+                text = "Edit Museum Profile",
+                style = MaterialTheme.typography.headlineMedium,
+                color = colors.inkPrimary
+            )
+            Spacer(modifier = Modifier.height(14.dp))
+
+            OutlinedTextField(
+                value = displayName,
+                onValueChange = { displayName = it.take(60) },
+                label = { Text("Display Name") },
+                singleLine = true,
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("edit_name_input")
+            )
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            OutlinedTextField(
+                value = ageInput,
+                onValueChange = { input -> ageInput = input.filter { it.isDigit() }.take(3) },
+                label = { Text("Age (13–120)") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("edit_age_input")
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Gender Selection restricted strictly to Male or Female per PRD Section 6
+            Text(
+                text = "Gender",
+                style = MaterialTheme.typography.labelLarge,
+                color = colors.inkPrimary
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            ArtmuseumSegmentedControl(
+                options = listOf("Female", "Male"),
+                selectedIndex = if (gender == "Female") 0 else 1,
+                onSelect = { index -> gender = if (index == 0) "Female" else "Male" }
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            OutlinedTextField(
+                value = bio,
+                onValueChange = { bio = it.take(500) },
+                label = { Text("Bio") },
+                minLines = 3,
+                maxLines = 5,
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("edit_bio_input")
+            )
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            Text(
+                text = "Museum Theme Palette",
+                style = MaterialTheme.typography.labelLarge,
+                color = colors.inkPrimary
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                items(ArtmuseumThemePalette.entries) { palette ->
+                    ArtmuseumThemeSwatch(
+                        palette = palette,
+                        selected = palette == selectedPalette,
+                        onClick = { selectedPalette = palette }
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // Profile Visibility (public / private)
+            Text(
+                text = "Profile Visibility",
+                style = MaterialTheme.typography.labelLarge,
+                color = colors.inkPrimary
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            ArtmuseumSegmentedControl(
+                options = listOf("Public", "Private"),
+                selectedIndex = if (profileVisibility == "public") 0 else 1,
+                onSelect = { idx -> profileVisibility = if (idx == 0) "public" else "private" }
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Contextual Notification Preference Toggle
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.NotificationsActive,
+                        contentDescription = null,
+                        tint = colors.inkPrimary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column {
+                        Text(
+                            text = "Activity Notifications",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = colors.inkPrimary
+                        )
+                        Text(
+                            text = "Likes, reflections, and gallery updates",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = colors.mutedText
+                        )
+                    }
+                }
+                Switch(
+                    checked = notificationsEnabled,
+                    onCheckedChange = { enabled ->
+                        if (enabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                            notifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                        } else {
+                            notificationsEnabled = enabled
+                        }
+                    }
+                )
+            }
+
+            Spacer(modifier = Modifier.height(18.dp))
+
+            ArtmuseumPrimaryButton(
+                text = "Save Profile",
+                onClick = {
+                    onSave(
+                        displayName,
+                        bio,
+                        ageInput,
+                        gender,
+                        profile.photoURL,
+                        selectedPalette,
+                        notificationsEnabled,
+                        profileVisibility
+                    )
+                },
+                modifier = Modifier.fillMaxWidth(),
+                testTag = "save_profile_button"
+            )
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            ArtmuseumSecondaryButton(
+                text = "Sign Out",
+                onClick = onSignOut,
+                modifier = Modifier.fillMaxWidth(),
+                testTag = "sign_out_button"
+            )
+
+            Spacer(modifier = Modifier.height(18.dp))
+        }
+    }
+}
+
+@Composable
+fun ExploreScreen(
+    allPosts: List<Post>,
+    publicUsers: List<UserProfile>,
+    searchQuery: String,
+    likedPostIds: Set<String>,
+    savedPostIds: Set<String>,
+    onSearchQueryChange: (String) -> Unit,
+    onOpenPostDetail: (Post) -> Unit,
+    onToggleLike: (Post) -> Unit,
+    onToggleSave: (String) -> Unit,
+    onBackToHome: () -> Unit
+) {
+    BackHandler(onBack = onBackToHome)
+
+    val colors = LocalArtmuseumColors.current
+    var selectedTopic by remember { mutableStateOf<String?>(null) }
+
+    val matchingPosts = remember(allPosts, searchQuery, selectedTopic) {
+        allPosts.filter { post ->
+            val matchesTopic = selectedTopic == null ||
+                post.topics.any { it.equals(selectedTopic, ignoreCase = true) }
+            val q = searchQuery.trim()
+            val matchesQuery = q.isEmpty() ||
+                post.text.contains(q, ignoreCase = true) ||
+                post.authorNameSnapshot.contains(q, ignoreCase = true) ||
+                post.topics.any { it.contains(q, ignoreCase = true) }
+            matchesTopic && matchesQuery
+        }
+    }
+
+    val matchingUsers = remember(publicUsers, searchQuery) {
+        val q = searchQuery.trim()
+        if (q.isEmpty()) emptyList()
+        else publicUsers.filter {
+            it.displayName.contains(q, ignoreCase = true) ||
+                it.bio.contains(q, ignoreCase = true)
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(colors.background)
+            .statusBarsPadding()
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp)) {
+            Text(
+                text = "Explore Museum",
+                style = MaterialTheme.typography.headlineLarge.copy(
+                    fontFamily = PlayfairDisplayFontFamily
+                ),
+                color = colors.inkPrimary
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = "Discover perspectives, themes, and fellow storytellers",
+                style = MaterialTheme.typography.bodySmall,
+                color = colors.mutedText
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            ArtmuseumSearchField(
+                value = searchQuery,
+                onValueChange = onSearchQueryChange,
+                placeholder = "Search thoughts, topics, or people...",
+                onClear = { onSearchQueryChange("") }
+            )
+        }
+
+        LazyRow(
+            contentPadding = PaddingValues(horizontal = 18.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            item {
+                ArtmuseumFilterChip(
+                    label = "All Themes",
+                    selected = selectedTopic == null,
+                    onClick = { selectedTopic = null }
+                )
+            }
+            items(ARTMUSEUM_TOPICS) { topic ->
+                ArtmuseumFilterChip(
+                    label = topic,
+                    selected = selectedTopic == topic,
+                    onClick = { selectedTopic = if (selectedTopic == topic) null else topic }
+                )
+            }
+        }
+
+        LazyColumn(
+            contentPadding = PaddingValues(
+                start = 16.dp,
+                end = 16.dp,
+                top = 10.dp,
+                bottom = 96.dp
+            ),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+            modifier = Modifier.fillMaxSize()
+        ) {
+            if (matchingUsers.isNotEmpty()) {
+                item {
+                    Text(
+                        text = "People",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = colors.inkPrimary
+                    )
+                }
+                items(matchingUsers, key = { it.uid }) { user ->
+                    Surface(
+                        shape = RoundedCornerShape(18.dp),
+                        color = colors.cardSurface,
+                        border = BorderStroke(0.8.dp, colors.border),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(14.dp)
+                        ) {
+                            ArtmuseumAvatar(
+                                photoURL = user.photoURL,
+                                contentDescription = user.displayName,
+                                size = 42.dp
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = user.displayName,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = colors.inkPrimary
+                                )
+                                Text(
+                                    text = "${user.age} · ${user.gender}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = colors.mutedText
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            items(matchingPosts, key = { it.postId }) { post ->
+                ArtmuseumPostCard(
+                    post = post,
+                    isLiked = post.postId in likedPostIds,
+                    isSaved = post.postId in savedPostIds,
+                    onCardClick = { onOpenPostDetail(post) },
+                    onLikeClick = { onToggleLike(post) },
+                    onSaveClick = { onToggleSave(post.postId) },
+                    onShareClick = {},
+                    onMoreClick = { onOpenPostDetail(post) },
+                    onAuthorClick = { onOpenPostDetail(post) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun SavedPostsScreen(
+    allPosts: List<Post>,
+    savedPostIds: Set<String>,
+    likedPostIds: Set<String>,
+    onOpenPostDetail: (Post) -> Unit,
+    onToggleLike: (Post) -> Unit,
+    onToggleSave: (String) -> Unit,
+    onBackToHome: () -> Unit
+) {
+    BackHandler(onBack = onBackToHome)
+
+    val colors = LocalArtmuseumColors.current
+    val savedPosts = remember(allPosts, savedPostIds) {
+        allPosts.filter { it.postId in savedPostIds }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(colors.background)
+            .statusBarsPadding()
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp)) {
+            Text(
+                text = "Saved Collection",
+                style = MaterialTheme.typography.headlineLarge.copy(
+                    fontFamily = PlayfairDisplayFontFamily
+                ),
+                color = colors.inkPrimary
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = "Exhibits and reflections bookmarked to your personal archive",
+                style = MaterialTheme.typography.bodySmall,
+                color = colors.mutedText
+            )
+        }
+
+        if (savedPosts.isEmpty()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(32.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    ArtmuseumOliveEmblem(size = 48.dp)
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = "Your Saved Archive is Quiet",
+                        style = MaterialTheme.typography.titleLarge,
+                        color = colors.inkPrimary
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "Tap the bookmark pill on any exhibit in the feed to keep it here across sessions.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = colors.mutedText,
+                        textAlign = TextAlign.Center
+                    )
+                }
+            }
+        } else {
+            LazyColumn(
+                contentPadding = PaddingValues(
+                    start = 16.dp,
+                    end = 16.dp,
+                    top = 6.dp,
+                    bottom = 96.dp
+                ),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+                modifier = Modifier.fillMaxSize()
+            ) {
+                items(savedPosts, key = { it.postId }) { post ->
+                    ArtmuseumPostCard(
+                        post = post,
+                        isLiked = post.postId in likedPostIds,
+                        isSaved = true,
+                        onCardClick = { onOpenPostDetail(post) },
+                        onLikeClick = { onToggleLike(post) },
+                        onSaveClick = { onToggleSave(post.postId) },
+                        onShareClick = {},
+                        onMoreClick = { onOpenPostDetail(post) },
+                        onAuthorClick = { onOpenPostDetail(post) }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun NotificationsBottomSheet(
+    notifications: List<ActivityNotification>,
+    onDismiss: () -> Unit,
+    onNotificationClick: (ActivityNotification) -> Unit
+) {
+    val colors = LocalArtmuseumColors.current
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = colors.cardSurface,
+        shape = ArtmuseumShapeTokens.LargeSheetTop
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .padding(horizontal = 20.dp, vertical = 12.dp)
+        ) {
+            Text(
+                text = "Museum Activity",
+                style = MaterialTheme.typography.headlineMedium,
+                color = colors.inkPrimary
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            if (notifications.isEmpty()) {
+                Text(
+                    text = "No activity notifications yet.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = colors.mutedText,
+                    modifier = Modifier.padding(vertical = 24.dp)
+                )
+            } else {
+                notifications.forEach { item ->
+                    Surface(
+                        onClick = { onNotificationClick(item) },
+                        shape = RoundedCornerShape(16.dp),
+                        color = if (item.isRead) colors.cardSurface else colors.subtleSurface,
+                        border = BorderStroke(0.6.dp, colors.border),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 5.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(12.dp)
+                        ) {
+                            ArtmuseumAvatar(
+                                photoURL = item.actorPhotoURL,
+                                contentDescription = item.actorName,
+                                size = 38.dp
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = item.actorName,
+                                    style = MaterialTheme.typography.titleSmall.copy(
+                                        fontWeight = FontWeight.SemiBold
+                                    ),
+                                    color = colors.inkPrimary
+                                )
+                                Text(
+                                    text = item.message,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = colors.mutedText
+                                )
+                            }
+                            if (!item.isRead) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(8.dp)
+                                        .clip(CircleShape)
+                                        .background(colors.pillSelectedFill)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+        }
+    }
+}

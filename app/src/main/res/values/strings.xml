@@ -1,0 +1,22 @@
+<resources>
+    <string name="app_name">Artmuseum</string>
+    <string name="tagline">Real People · Real Thoughts · A Kinder World</string>
+    <string name="welcome_quote">“Art is not what you see,\nbut what you make others see.”</string>
+    <string name="continue_with_google">Continue with Google</string>
+    <string name="continue_with_email">Continue with Email</string>
+    <string name="already_have_account">Already have an account?</string>
+    <string name="sign_in">Sign In</string>
+    <string name="create_post_title">Create Post</string>
+    <string name="post_action">Post</string>
+    <string name="gallery_action">Gallery</string>
+    <string name="camera_action">Camera</string>
+    <string name="add_caption_hint">Add a caption…</string>
+    <string name="add_tags_label">Add Tags (optional)</string>
+    <string name="choose_theme_label">Choose Theme</string>
+    <string name="edit_profile">Edit Profile</string>
+    <string name="add_comment_hint">Add a comment…</string>
+    <string name="nav_home">Home</string>
+    <string name="nav_explore">Explore</string>
+    <string name="nav_saved">Saved</string>
+    <string name="nav_profile">Profile</string>
+</resources>
