@@ -1,8 +1,13 @@
 package com.example.ui.auth
 
+import android.Manifest
 import android.app.Activity
 import android.content.Context
+import android.content.pm.PackageManager
+import android.os.Build
 import android.util.Log
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -23,22 +28,33 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Email
+import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.material.icons.outlined.PhotoLibrary
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.window.Dialog
+import androidx.core.content.ContextCompat
+import com.example.ui.components.ArtmuseumSegmentedControl
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -208,7 +224,48 @@ fun ArtmuseumWelcomeAuthScreen(
 
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
-    var showEmailProviderNotice by remember { mutableStateOf(false) }
+    var showEmailAuthSheet by remember { mutableStateOf(false) }
+
+    val permissionsToRequest = remember {
+        buildList {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                add(Manifest.permission.POST_NOTIFICATIONS)
+                add(Manifest.permission.READ_MEDIA_IMAGES)
+            } else {
+                add(Manifest.permission.READ_EXTERNAL_STORAGE)
+            }
+            add(Manifest.permission.CAMERA)
+        }.toTypedArray()
+    }
+
+    var showPermissionIntroDialog by rememberSaveable { mutableStateOf(false) }
+    var hasPromptedIntroPermissions by rememberSaveable { mutableStateOf(false) }
+    var permissionsGrantedNotice by rememberSaveable { mutableStateOf(false) }
+
+    val permissionsLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { results ->
+        showPermissionIntroDialog = false
+        permissionsGrantedNotice = results.values.any { it }
+    }
+
+    LaunchedEffect(Unit) {
+        if (!hasPromptedIntroPermissions) {
+            hasPromptedIntroPermissions = true
+            delay(400L)
+            val needsNotif = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+            } else false
+            val needsStorage = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                ContextCompat.checkSelfPermission(context, Manifest.permission.READ_MEDIA_IMAGES) != PackageManager.PERMISSION_GRANTED
+            } else {
+                ContextCompat.checkSelfPermission(context, Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED
+            }
+            if (needsNotif || needsStorage) {
+                showPermissionIntroDialog = true
+            }
+        }
+    }
 
     LaunchedEffect(Unit) {
         attemptAutoSignIn(
@@ -369,7 +426,37 @@ fun ArtmuseumWelcomeAuthScreen(
                 )
             }
 
-            Spacer(modifier = Modifier.height(18.dp))
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // Intro Permissions Access Prompt Chip
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(Color(0xFFEDE9E0))
+                    .clickable { showPermissionIntroDialog = true }
+                    .padding(horizontal = 14.dp, vertical = 7.dp)
+                    .testTag("intro_permissions_chip")
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Notifications,
+                    contentDescription = null,
+                    tint = Color(0xFF5D634E),
+                    modifier = Modifier.size(15.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = if (permissionsGrantedNotice) "Gallery & Notifications Configured ✓" else "Enable Gallery & Notification Access",
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        fontSize = 11.5.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = InkPrimary
+                    )
+                )
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
 
             if (errorMessage != null) {
                 Surface(
@@ -404,7 +491,7 @@ fun ArtmuseumWelcomeAuthScreen(
             // Secondary Pill Button: Continue with Email
             ArtmuseumSecondaryButton(
                 text = "Continue with Email",
-                onClick = { showEmailProviderNotice = true },
+                onClick = { showEmailAuthSheet = true },
                 leadingContent = {
                     Icon(
                         imageVector = Icons.Outlined.Email,
@@ -448,44 +535,326 @@ fun ArtmuseumWelcomeAuthScreen(
         }
     }
 
-    if (showEmailProviderNotice) {
-        ModalBottomSheet(
-            onDismissRequest = { showEmailProviderNotice = false },
-            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-            containerColor = WarmPaper,
-            shape = ArtmuseumShapeTokens.LargeSheetTop
+    if (showPermissionIntroDialog) {
+        ArtmuseumIntroPermissionsDialog(
+            onDismiss = { showPermissionIntroDialog = false },
+            onGrantRequested = {
+                permissionsLauncher.launch(permissionsToRequest)
+            }
+        )
+    }
+
+    if (showEmailAuthSheet) {
+        EmailAuthModalSheet(
+            onAuthSuccess = onAuthSuccess,
+            onDismiss = { showEmailAuthSheet = false }
+        )
+    }
+}
+
+@Composable
+fun ArtmuseumIntroPermissionsDialog(
+    onDismiss: () -> Unit,
+    onGrantRequested: () -> Unit
+) {
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            shape = RoundedCornerShape(26.dp),
+            color = MuseumCream,
+            tonalElevation = 8.dp,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 4.dp)
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 24.dp, vertical = 12.dp)
-                    .navigationBarsPadding(),
+                    .padding(22.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
+                ArtmuseumOliveEmblem(size = 38.dp, showCircleMedallion = false)
+                Spacer(modifier = Modifier.height(8.dp))
+
                 Text(
-                    text = "Google Sign-In Provisioned",
-                    style = MaterialTheme.typography.headlineMedium,
-                    color = InkPrimary
-                )
-                Spacer(modifier = Modifier.height(10.dp))
-                Text(
-                    text = "This Artmuseum environment is securely provisioned with Firebase Authentication via Google Sign-In (Credential Manager). To enable Email/Password authentication in addition to Google Sign-In, enable the Email/Password provider in the Firebase Console for project datesme-347b7.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MutedTaupe,
+                    text = "Welcome to Artmuseum",
+                    style = MaterialTheme.typography.titleLarge.copy(
+                        fontFamily = PlayfairDisplayFontFamily,
+                        fontSize = 22.sp,
+                        color = InkPrimary
+                    ),
                     textAlign = TextAlign.Center
                 )
-                Spacer(modifier = Modifier.height(20.dp))
-                ArtmuseumPrimaryButton(
-                    text = "Continue with Google",
-                    onClick = {
-                        showEmailProviderNotice = false
-                        triggerGoogleSignIn()
-                    },
-                    leadingContent = { GoogleBadgeIcon() },
-                    modifier = Modifier.fillMaxWidth()
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                Text(
+                    text = "Enable notifications and gallery access to enjoy the full museum experience.",
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        fontSize = 12.5.sp,
+                        color = MutedTaupe,
+                        lineHeight = 18.sp
+                    ),
+                    textAlign = TextAlign.Center
                 )
+
                 Spacer(modifier = Modifier.height(16.dp))
+
+                // Permission row 1: Notifications
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(Color(0xFFF1ECE2))
+                        .padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFF5D634E)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Notifications,
+                            contentDescription = null,
+                            tint = Color(0xFFF7F2E8),
+                            modifier = Modifier.size(19.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Notifications",
+                            style = MaterialTheme.typography.bodyMedium.copy(
+                                fontWeight = FontWeight.SemiBold,
+                                color = InkPrimary,
+                                fontSize = 13.5.sp
+                            )
+                        )
+                        Text(
+                            text = "Real-time updates on likes, comments, and new followers.",
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                fontSize = 11.5.sp,
+                                color = MutedTaupe
+                            )
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Permission row 2: Gallery Access
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(Color(0xFFF1ECE2))
+                        .padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFF5D634E)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.PhotoLibrary,
+                            contentDescription = null,
+                            tint = Color(0xFFF7F2E8),
+                            modifier = Modifier.size(19.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Gallery & Photos",
+                            style = MaterialTheme.typography.bodyMedium.copy(
+                                fontWeight = FontWeight.SemiBold,
+                                color = InkPrimary,
+                                fontSize = 13.5.sp
+                            )
+                        )
+                        Text(
+                            text = "Customize profile banners, avatars & exhibit original artworks.",
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                fontSize = 11.5.sp,
+                                color = MutedTaupe
+                            )
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(18.dp))
+
+                ArtmuseumPrimaryButton(
+                    text = "Grant All Permissions",
+                    onClick = onGrantRequested,
+                    modifier = Modifier.fillMaxWidth(),
+                    testTag = "grant_all_permissions_button"
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                ArtmuseumSecondaryButton(
+                    text = "Continue",
+                    onClick = onDismiss,
+                    modifier = Modifier.fillMaxWidth(),
+                    testTag = "dismiss_permissions_button"
+                )
             }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun EmailAuthModalSheet(
+    onAuthSuccess: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val scope = rememberCoroutineScope()
+    var isSignUp by remember { mutableStateOf(false) }
+    var email by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+    var isLoading by remember { mutableStateOf(false) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = WarmPaper,
+        shape = ArtmuseumShapeTokens.LargeSheetTop
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .padding(horizontal = 24.dp, vertical = 12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = if (isSignUp) "Create Artmuseum Account" else "Welcome Back",
+                style = MaterialTheme.typography.headlineMedium.copy(
+                    fontFamily = PlayfairDisplayFontFamily
+                ),
+                color = InkPrimary
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = if (isSignUp) "Enter your email & password to register" else "Sign in with your email & password",
+                style = MaterialTheme.typography.bodySmall,
+                color = MutedTaupe
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            ArtmuseumSegmentedControl(
+                options = listOf("Sign In", "Sign Up"),
+                selectedIndex = if (isSignUp) 1 else 0,
+                onSelect = {
+                    isSignUp = it == 1
+                    errorMessage = null
+                }
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            if (errorMessage != null) {
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = Color(0xFFFBEAE8),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 12.dp)
+                ) {
+                    Text(
+                        text = errorMessage!!,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFF9C2F2F),
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
+                    )
+                }
+            }
+
+            OutlinedTextField(
+                value = email,
+                onValueChange = { email = it.trim() },
+                label = { Text("Email address") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("email_auth_email_input")
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            OutlinedTextField(
+                value = password,
+                onValueChange = { password = it },
+                label = { Text("Password") },
+                singleLine = true,
+                visualTransformation = PasswordVisualTransformation(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("email_auth_password_input")
+            )
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            ArtmuseumPrimaryButton(
+                text = if (isSignUp) "Create Account" else "Sign In",
+                onClick = {
+                    val cleanEmail = email.trim()
+                    if (cleanEmail.isBlank() || !cleanEmail.contains("@")) {
+                        errorMessage = "Please enter a valid email address."
+                        return@ArtmuseumPrimaryButton
+                    }
+                    if (password.length < 6) {
+                        errorMessage = "Password must be at least 6 characters."
+                        return@ArtmuseumPrimaryButton
+                    }
+                    isLoading = true
+                    errorMessage = null
+                    scope.launch {
+                        try {
+                            if (isSignUp) {
+                                Firebase.auth.createUserWithEmailAndPassword(cleanEmail, password).await()
+                            } else {
+                                try {
+                                    Firebase.auth.signInWithEmailAndPassword(cleanEmail, password).await()
+                                } catch (e: Exception) {
+                                    // If sign in fails because user is new, automatically register
+                                    Firebase.auth.createUserWithEmailAndPassword(cleanEmail, password).await()
+                                }
+                            }
+                            isLoading = false
+                            onAuthSuccess()
+                        } catch (e: Exception) {
+                            isLoading = false
+                            Log.e("Auth", "Email auth failed", e)
+                            val msg = e.localizedMessage ?: "Authentication failed"
+                            errorMessage = if (msg.contains("CONFIGURATION_NOT_FOUND") || msg.contains("ADMIN_ONLY_OPERATION")) {
+                                "Email/Password sign-in is disabled in Firebase Console. Please sign in with Google."
+                            } else {
+                                msg
+                            }
+                        }
+                    }
+                },
+                isLoading = isLoading,
+                modifier = Modifier.fillMaxWidth(),
+                testTag = "submit_email_auth_button"
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
         }
     }
 }

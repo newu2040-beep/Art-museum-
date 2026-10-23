@@ -192,7 +192,7 @@ fun ArtmuseumArtworkImage(
                     val bytes = Base64.decode(base64Part, Base64.DEFAULT)
                     BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
                 } else null
-            } catch (_: Exception) {
+            } catch (t: Throwable) {
                 null
             }
         }
@@ -921,7 +921,13 @@ fun ArtmuseumThemeSwatch(
         ArtmuseumThemePalette.ROSE -> Color(0xFFD99B96)
         ArtmuseumThemePalette.TERRACOTTA -> Color(0xFFD08B6E)
         ArtmuseumThemePalette.LAVENDER -> Color(0xFFB5A8CC)
+        ArtmuseumThemePalette.SUNSET -> Color(0xFFD88055)
+        ArtmuseumThemePalette.OLIVE -> Color(0xFF5B694D)
         ArtmuseumThemePalette.MIDNIGHT -> Color(0xFF343B40)
+        ArtmuseumThemePalette.OBSIDIAN -> Color(0xFF1C1C20)
+        ArtmuseumThemePalette.DARK_EMERALD -> Color(0xFF1A2B23)
+        ArtmuseumThemePalette.DARK_AMETHYST -> Color(0xFF231E30)
+        ArtmuseumThemePalette.DARK_CHARCOAL -> Color(0xFF252529)
     }
 
     Column(

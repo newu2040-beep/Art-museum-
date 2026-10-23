@@ -13,6 +13,7 @@ import com.example.data.model.ArtmuseumThemePalette
 import com.example.data.model.Post
 import com.example.data.model.PostComment
 import com.example.data.model.UserBlock
+import com.example.data.model.UserFollow
 import com.example.data.model.UserProfile
 import com.example.data.repository.ArtmuseumRepository
 import java.io.ByteArrayOutputStream
@@ -52,6 +53,39 @@ class ArtmuseumViewModel(
 
     private val _likedPostIds = MutableStateFlow<Set<String>>(emptySet())
     val likedPostIds: StateFlow<Set<String>> = _likedPostIds.asStateFlow()
+
+    val followingUserIds: StateFlow<Set<String>> = repository.observeFollowingUserIds(currentUserId)
+        .catch { e ->
+            Log.w(TAG, "Error observing following user IDs", e)
+            emit(emptySet())
+        }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000L),
+            initialValue = emptySet()
+        )
+
+    val followersList: StateFlow<List<UserFollow>> = repository.observeFollowers(currentUserId)
+        .catch { e ->
+            Log.w(TAG, "Error observing followers", e)
+            emit(emptyList())
+        }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000L),
+            initialValue = emptyList()
+        )
+
+    val followingList: StateFlow<List<UserFollow>> = repository.observeFollowing(currentUserId)
+        .catch { e ->
+            Log.w(TAG, "Error observing following", e)
+            emit(emptyList())
+        }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000L),
+            initialValue = emptyList()
+        )
 
     private val _selectedPostComments = MutableStateFlow<List<PostComment>>(emptyList())
     val selectedPostComments: StateFlow<List<PostComment>> = _selectedPostComments.asStateFlow()
@@ -350,6 +384,7 @@ class ArtmuseumViewModel(
         ageInput: String,
         gender: String,
         photoURL: String,
+        bannerURL: String,
         themePalette: ArtmuseumThemePalette,
         notificationsEnabled: Boolean,
         profileVisibility: String,
@@ -372,6 +407,7 @@ class ArtmuseumViewModel(
                 age = parsedAge,
                 gender = gender,
                 photoURL = photoURL,
+                bannerURL = bannerURL,
                 themePreference = themePalette.label,
                 notificationsEnabled = notificationsEnabled,
                 profileVisibility = profileVisibility
@@ -386,6 +422,57 @@ class ArtmuseumViewModel(
             }
         }
     }
+
+    fun updateBanner(dataUri: String, onComplete: () -> Unit = {}) {
+        val currentProfile = (userProfileState.value as? UiState.Success)?.data ?: UserProfile(
+            uid = currentUserId,
+            displayName = initialDisplayName.ifBlank { "Sophia" }
+        )
+        _isSubmitting.value = true
+        viewModelScope.launch {
+            val res = repository.updateProfile(
+                displayName = currentProfile.displayName,
+                bio = currentProfile.bio,
+                age = currentProfile.age,
+                gender = currentProfile.gender,
+                photoURL = currentProfile.photoURL,
+                bannerURL = dataUri,
+                themePreference = (_activeTheme.value).label,
+                notificationsEnabled = currentProfile.notificationsEnabled,
+                profileVisibility = currentProfile.profileVisibility
+            )
+            _isSubmitting.value = false
+            res.onSuccess {
+                _statusBanner.value = "Museum banner updated"
+                onComplete()
+            }.onFailure { err ->
+                _statusBanner.value = err.localizedMessage ?: "Failed to update banner"
+            }
+        }
+    }
+
+    fun toggleFollowUser(targetUid: String, targetName: String, targetPhotoURL: String) {
+        if (targetUid == currentUserId) return
+        val currentProfile = (userProfileState.value as? UiState.Success)?.data ?: UserProfile(
+            uid = currentUserId,
+            displayName = initialDisplayName.ifBlank { "Sophia" }
+        )
+        viewModelScope.launch {
+            repository.toggleFollowUser(
+                targetUid = targetUid,
+                targetName = targetName,
+                targetPhotoURL = targetPhotoURL,
+                actorProfile = currentProfile
+            ).onSuccess { nowFollowing ->
+                _statusBanner.value = if (nowFollowing) "Now following $targetName" else "Unfollowed $targetName"
+            }.onFailure { err ->
+                _statusBanner.value = err.localizedMessage ?: "Unable to update follow status"
+            }
+        }
+    }
+
+    fun observeFollowers(userId: String) = repository.observeFollowers(userId)
+    fun observeFollowing(userId: String) = repository.observeFollowing(userId)
 
     fun selectTheme(palette: ArtmuseumThemePalette) {
         _activeTheme.value = palette
@@ -446,13 +533,32 @@ class ArtmuseumViewModel(
         suspend fun encodeUriToCompactDataUri(context: Context, uri: Uri): String? =
             withContext(Dispatchers.IO) {
                 try {
-                    val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
-                        ?: return@withContext null
-                    val original = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-                        ?: return@withContext null
-                    encodeBitmapToCompactDataUri(original)
-                } catch (e: Exception) {
-                    Log.w(TAG, "Failed to encode URI to data URI", e)
+                    // Pre-measure bounds to prevent OutOfMemory on large camera images
+                    val boundsOptions = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                    context.contentResolver.openInputStream(uri)?.use { stream ->
+                        BitmapFactory.decodeStream(stream, null, boundsOptions)
+                    }
+                    val w = boundsOptions.outWidth
+                    val h = boundsOptions.outHeight
+                    if (w <= 0 || h <= 0) return@withContext null
+
+                    val maxTargetDim = 1280
+                    var sampleSize = 1
+                    while ((w / sampleSize) > maxTargetDim * 2 || (h / sampleSize) > maxTargetDim * 2) {
+                        sampleSize *= 2
+                    }
+
+                    val decodeOptions = BitmapFactory.Options().apply {
+                        inSampleSize = sampleSize
+                        inPreferredConfig = Bitmap.Config.ARGB_8888
+                    }
+                    val sampledBitmap = context.contentResolver.openInputStream(uri)?.use { stream ->
+                        BitmapFactory.decodeStream(stream, null, decodeOptions)
+                    } ?: return@withContext null
+
+                    encodeBitmapToCompactDataUri(sampledBitmap)
+                } catch (t: Throwable) {
+                    Log.w(TAG, "Failed to encode URI to data URI", t)
                     null
                 }
             }
@@ -460,7 +566,7 @@ class ArtmuseumViewModel(
         suspend fun encodeBitmapToCompactDataUri(bitmap: Bitmap): String? =
             withContext(Dispatchers.IO) {
                 try {
-                    val maxDim = 480
+                    val maxDim = 1280
                     val ratio = minOf(
                         maxDim.toFloat() / bitmap.width.coerceAtLeast(1),
                         maxDim.toFloat() / bitmap.height.coerceAtLeast(1),
@@ -468,13 +574,32 @@ class ArtmuseumViewModel(
                     )
                     val targetW = (bitmap.width * ratio).toInt().coerceAtLeast(1)
                     val targetH = (bitmap.height * ratio).toInt().coerceAtLeast(1)
-                    val scaled = Bitmap.createScaledBitmap(bitmap, targetW, targetH, true)
-                    val out = ByteArrayOutputStream()
-                    scaled.compress(Bitmap.CompressFormat.JPEG, 65, out)
+                    var scaled = if (targetW != bitmap.width || targetH != bitmap.height) {
+                        Bitmap.createScaledBitmap(bitmap, targetW, targetH, true)
+                    } else {
+                        bitmap
+                    }
+                    var quality = 84
+                    var out = ByteArrayOutputStream()
+                    scaled.compress(Bitmap.CompressFormat.JPEG, quality, out)
+
+                    // Target <= 350KB byte size to guarantee Firestore acceptance & fast rendering
+                    while (out.size() > 350_000 && quality > 40) {
+                        quality -= 12
+                        out = ByteArrayOutputStream()
+                        scaled.compress(Bitmap.CompressFormat.JPEG, quality, out)
+                    }
+
+                    if (out.size() > 350_000) {
+                        scaled = Bitmap.createScaledBitmap(scaled, (scaled.width * 0.8f).toInt().coerceAtLeast(1), (scaled.height * 0.8f).toInt().coerceAtLeast(1), true)
+                        out = ByteArrayOutputStream()
+                        scaled.compress(Bitmap.CompressFormat.JPEG, 65, out)
+                    }
+
                     val base64 = Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP)
                     "data:image/jpeg;base64,$base64"
-                } catch (e: Exception) {
-                    Log.w(TAG, "Failed to encode bitmap", e)
+                } catch (t: Throwable) {
+                    Log.w(TAG, "Failed to encode bitmap", t)
                     null
                 }
             }

@@ -1,9 +1,14 @@
 package com.example
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -26,11 +31,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.credentials.CredentialManager
 import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.APPLICATION_KEY
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -39,7 +46,9 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.example.data.model.ArtmuseumThemePalette
 import com.example.data.model.Post
+import com.example.data.model.UserFollow
 import com.example.data.repository.ArtmuseumRepository
+import com.example.ui.auth.ArtmuseumIntroPermissionsDialog
 import com.example.ui.auth.ArtmuseumWelcomeAuthScreen
 import com.example.ui.auth.authStateFlow
 import com.example.ui.auth.signOutArtmuseum
@@ -114,8 +123,20 @@ fun ArtmuseumAuthenticatedShell(
                 val app = checkNotNull(this[APPLICATION_KEY]) {
                     "APPLICATION_KEY missing from CreationExtras"
                 }
-                val databaseId = app.getString(R.string.firestore_database_id)
-                val db = FirebaseFirestore.getInstance(databaseId)
+                val db = try {
+                    val dbId = try { app.getString(R.string.firestore_database_id) } catch (_: Exception) { "" }
+                    if (dbId.isNotBlank() && dbId != "(default)" && !dbId.startsWith("ai-studio-android-devpixel")) {
+                        try {
+                            FirebaseFirestore.getInstance(dbId)
+                        } catch (_: Exception) {
+                            FirebaseFirestore.getInstance()
+                        }
+                    } else {
+                        FirebaseFirestore.getInstance()
+                    }
+                } catch (_: Exception) {
+                    FirebaseFirestore.getInstance()
+                }
                 ArtmuseumViewModel(
                     repository = ArtmuseumRepository(db),
                     currentUserId = currentUserId,
@@ -132,6 +153,7 @@ fun ArtmuseumAuthenticatedShell(
     val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
     val likedPostIds by viewModel.likedPostIds.collectAsStateWithLifecycle()
     val savedPostIds by viewModel.savedPostIds.collectAsStateWithLifecycle()
+    val followingUserIds by viewModel.followingUserIds.collectAsStateWithLifecycle()
     val blockedUsers by viewModel.blockedUsers.collectAsStateWithLifecycle()
     val notifications by viewModel.notifications.collectAsStateWithLifecycle()
     val publicUsers by viewModel.publicUsers.collectAsStateWithLifecycle()
@@ -139,6 +161,9 @@ fun ArtmuseumAuthenticatedShell(
     val selectedPostComments by viewModel.selectedPostComments.collectAsStateWithLifecycle()
     val isSubmitting by viewModel.isSubmitting.collectAsStateWithLifecycle()
     val statusBanner by viewModel.statusBanner.collectAsStateWithLifecycle()
+
+    val followersList by viewModel.followersList.collectAsStateWithLifecycle()
+    val followingList by viewModel.followingList.collectAsStateWithLifecycle()
 
     var currentDestination by remember {
         mutableStateOf<ArtmuseumDestination>(ArtmuseumDestination.MainTab(ArtmuseumTab.HOME))
@@ -150,6 +175,45 @@ fun ArtmuseumAuthenticatedShell(
     val userProfile = (userProfileState as? UiState.Success)?.data
     val allFeedPosts = (feedState as? UiState.Success)?.data ?: emptyList()
     val unreadNotifications = remember(notifications) { notifications.count { !it.isRead } }
+
+    val permissionsToRequest = remember {
+        buildList {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                add(Manifest.permission.POST_NOTIFICATIONS)
+                add(Manifest.permission.READ_MEDIA_IMAGES)
+            } else {
+                add(Manifest.permission.READ_EXTERNAL_STORAGE)
+            }
+            add(Manifest.permission.CAMERA)
+        }.toTypedArray()
+    }
+
+    var showShellPermissionsDialog by rememberSaveable { mutableStateOf(false) }
+    var hasCheckedShellPermissions by rememberSaveable { mutableStateOf(false) }
+
+    val shellPermissionsLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) {
+        showShellPermissionsDialog = false
+    }
+
+    LaunchedEffect(Unit) {
+        if (!hasCheckedShellPermissions) {
+            hasCheckedShellPermissions = true
+            val needsNotif = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+            } else false
+            val needsStorage = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                ContextCompat.checkSelfPermission(context, Manifest.permission.READ_MEDIA_IMAGES) != PackageManager.PERMISSION_GRANTED
+            } else {
+                ContextCompat.checkSelfPermission(context, Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED
+            }
+            if (needsNotif || needsStorage) {
+                delay(600L)
+                showShellPermissionsDialog = true
+            }
+        }
+    }
 
     LaunchedEffect(statusBanner) {
         if (statusBanner != null) {
@@ -225,6 +289,7 @@ fun ArtmuseumAuthenticatedShell(
                                     searchQuery = searchQuery,
                                     likedPostIds = likedPostIds,
                                     savedPostIds = savedPostIds,
+                                    followingUserIds = followingUserIds,
                                     onSearchQueryChange = viewModel::updateSearchQuery,
                                     onOpenPostDetail = { post ->
                                         viewModel.observeCommentsForPost(post.postId)
@@ -232,6 +297,7 @@ fun ArtmuseumAuthenticatedShell(
                                     },
                                     onToggleLike = viewModel::toggleLike,
                                     onToggleSave = viewModel::toggleSave,
+                                    onToggleFollowUser = viewModel::toggleFollowUser,
                                     onBackToHome = {
                                         currentDestination = ArtmuseumDestination.MainTab(ArtmuseumTab.HOME)
                                     }
@@ -263,6 +329,8 @@ fun ArtmuseumAuthenticatedShell(
                                     savedPostIds = savedPostIds,
                                     blockedUsers = blockedUsers,
                                     activeTheme = activeTheme,
+                                    followersList = followersList,
+                                    followingList = followingList,
                                     onBackToHome = {
                                         currentDestination = ArtmuseumDestination.MainTab(ArtmuseumTab.HOME)
                                     },
@@ -270,13 +338,14 @@ fun ArtmuseumAuthenticatedShell(
                                         viewModel.observeCommentsForPost(post.postId)
                                         currentDestination = ArtmuseumDestination.PostDetail(post.postId)
                                     },
-                                    onSaveProfileChanges = { name, bio, ageStr, gender, photo, palette, notif, vis ->
+                                    onSaveProfileChanges = { name, bio, ageStr, gender, photo, banner, palette, notif, vis ->
                                         viewModel.saveProfileChanges(
                                             displayName = name,
                                             bio = bio,
                                             ageInput = ageStr,
                                             gender = gender,
                                             photoURL = photo,
+                                            bannerURL = banner,
                                             themePalette = palette,
                                             notificationsEnabled = notif,
                                             profileVisibility = vis,
@@ -438,6 +507,15 @@ fun ArtmuseumAuthenticatedShell(
                     TextButton(onClick = { reportTargetPost = null }) {
                         Text("Cancel")
                     }
+                }
+            )
+        }
+
+        if (showShellPermissionsDialog) {
+            ArtmuseumIntroPermissionsDialog(
+                onDismiss = { showShellPermissionsDialog = false },
+                onGrantRequested = {
+                    shellPermissionsLauncher.launch(permissionsToRequest)
                 }
             )
         }

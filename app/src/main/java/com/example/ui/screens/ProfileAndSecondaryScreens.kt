@@ -82,6 +82,7 @@ import com.example.data.model.ActivityNotification
 import com.example.data.model.ArtmuseumThemePalette
 import com.example.data.model.Post
 import com.example.data.model.UserBlock
+import com.example.data.model.UserFollow
 import com.example.data.model.UserProfile
 import com.example.ui.components.ArtmuseumArtworkImage
 import com.example.ui.components.ArtmuseumAvatar
@@ -112,6 +113,8 @@ fun ProfileScreen(
     savedPostIds: Set<String>,
     blockedUsers: List<UserBlock>,
     activeTheme: ArtmuseumThemePalette,
+    followersList: List<UserFollow> = emptyList(),
+    followingList: List<UserFollow> = emptyList(),
     onBackToHome: () -> Unit,
     onOpenPostDetail: (Post) -> Unit,
     onSaveProfileChanges: (
@@ -120,6 +123,7 @@ fun ProfileScreen(
         ageInput: String,
         gender: String,
         photoURL: String,
+        bannerURL: String,
         themePalette: ArtmuseumThemePalette,
         notificationsEnabled: Boolean,
         profileVisibility: String
@@ -141,9 +145,10 @@ fun ProfileScreen(
         gender = "Female",
         bio = "Just a girl who finds beauty in meaningful conversations, art, nature and real connections. \uD83C\uDF3F",
         photoURL = "preset:avatar_sophia",
+        bannerURL = "preset:profile_header",
         postCount = 48,
-        followerCount = 2600,
-        followingCount = 312,
+        followerCount = followersList.size.coerceAtLeast(2600),
+        followingCount = followingList.size.coerceAtLeast(312),
         isVerified = true
     )
 
@@ -152,6 +157,7 @@ fun ProfileScreen(
     var showSettingsMenu by remember { mutableStateOf(false) }
     var showDeleteAccountDialog by remember { mutableStateOf(false) }
     var showBlockedUsersSheet by remember { mutableStateOf(false) }
+    var showFollowListSheet by remember { mutableStateOf<String?>(null) } // "followers" or "following"
 
     // Avatar photo picker
     val avatarPickerLauncher = rememberLauncherForActivityResult(
@@ -162,15 +168,42 @@ fun ProfileScreen(
                 val dataUri = ArtmuseumViewModel.encodeUriToCompactDataUri(context, uri)
                 if (dataUri != null) {
                     onSaveProfileChanges(
-                        currentProfile.displayName,
-                        currentProfile.bio,
-                        currentProfile.age.toString(),
-                        currentProfile.gender,
+                        currentProfile.displayName.ifBlank { "Sophia" },
+                        currentProfile.bio.take(500),
+                        currentProfile.age.coerceIn(13, 120).toString(),
+                        if (currentProfile.gender == "Male") "Male" else "Female",
+                        dataUri,
+                        currentProfile.bannerURL.ifBlank { "preset:profile_header" },
+                        activeTheme,
+                        currentProfile.notificationsEnabled,
+                        currentProfile.profileVisibility
+                    )
+                    onShowMessage("Profile photo updated")
+                }
+            }
+        }
+    }
+
+    // Banner photo picker
+    val bannerPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
+    ) { uri ->
+        if (uri != null) {
+            scope.launch {
+                val dataUri = ArtmuseumViewModel.encodeUriToCompactDataUri(context, uri)
+                if (dataUri != null) {
+                    onSaveProfileChanges(
+                        currentProfile.displayName.ifBlank { "Sophia" },
+                        currentProfile.bio.take(500),
+                        currentProfile.age.coerceIn(13, 120).toString(),
+                        if (currentProfile.gender == "Male") "Male" else "Female",
+                        currentProfile.photoURL.ifBlank { "preset:avatar_sophia" },
                         dataUri,
                         activeTheme,
                         currentProfile.notificationsEnabled,
                         currentProfile.profileVisibility
                     )
+                    onShowMessage("Museum banner updated")
                 }
             }
         }
@@ -195,21 +228,58 @@ fun ProfileScreen(
             .verticalScroll(rememberScrollState())
             .padding(bottom = 96.dp)
     ) {
-        // Top Floral Banner + Overlapping Avatar (Matches Screen 5 of mockup)
+        // Top Banner + Avatar Header
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(254.dp)
+                .height(260.dp)
         ) {
-            // Floral banner painting
-            Image(
-                painter = painterResource(id = R.drawable.art_profile_header),
+            // High-quality customizable botanical/artistic profile banner
+            ArtmuseumArtworkImage(
+                imageSource = currentProfile.bannerURL.ifBlank { "preset:profile_header" },
                 contentDescription = "Botanical profile banner",
                 contentScale = ContentScale.Crop,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(200.dp)
             )
+
+            // Edit Banner Camera Pill Button (Top Right of Banner)
+            Surface(
+                onClick = {
+                    bannerPickerLauncher.launch(
+                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                    )
+                },
+                shape = ArtmuseumShapeTokens.Pill,
+                color = Color.Black.copy(alpha = 0.52f),
+                border = BorderStroke(0.8.dp, Color.White.copy(alpha = 0.6f)),
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .statusBarsPadding()
+                    .padding(top = 56.dp, end = 16.dp)
+                    .testTag("edit_banner_button")
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.CameraAlt,
+                        contentDescription = "Edit Banner",
+                        tint = WarmPaper,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "Edit Banner",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            color = WarmPaper,
+                            fontWeight = FontWeight.Medium
+                        )
+                    )
+                }
+            }
 
             // Top bar icons: < Back on left, ⋯ Settings on right
             Row(
@@ -280,7 +350,7 @@ fun ProfileScreen(
                 }
             }
 
-            // Rounded Card Sheet Backdrop starting under avatar center
+            // Rounded Card Sheet Backdrop starting smoothly under avatar center
             Surface(
                 shape = ArtmuseumShapeTokens.LargeSheetTop,
                 color = colors.cardSurface,
@@ -290,7 +360,7 @@ fun ProfileScreen(
                     .align(Alignment.BottomCenter)
             ) {}
 
-            // Centered Circular Avatar (102dp) + Small Circular Camera Button
+            // Centered Circular Avatar (102dp) + Camera Button
             Box(
                 contentAlignment = Alignment.BottomEnd,
                 modifier = Modifier
@@ -302,7 +372,7 @@ fun ProfileScreen(
                     contentDescription = currentProfile.displayName,
                     size = 102.dp,
                     borderWidth = 3.5.dp,
-                    borderColor = WarmPaper,
+                    borderColor = colors.cardSurface,
                     onClick = {
                         avatarPickerLauncher.launch(
                             PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
@@ -316,11 +386,11 @@ fun ProfileScreen(
                         )
                     },
                     shape = CircleShape,
-                    color = WarmPaper,
+                    color = colors.cardSurface,
                     border = BorderStroke(1.dp, colors.border),
                     shadowElevation = 2.dp,
                     modifier = Modifier
-                        .size(30.dp)
+                        .size(32.dp)
                         .offset(x = (-2).dp, y = (-2).dp)
                         .testTag("change_avatar_button")
                 ) {
@@ -329,14 +399,14 @@ fun ProfileScreen(
                             imageVector = Icons.Outlined.CameraAlt,
                             contentDescription = "Change profile photo",
                             tint = colors.inkPrimary,
-                            modifier = Modifier.size(15.dp)
+                            modifier = Modifier.size(16.dp)
                         )
                     }
                 }
             }
         }
 
-        // Main Profile Content Surface (Matches Screen 5 of mockup)
+        // Main Profile Content Surface (Clean hierarchy with no overlapping)
         Surface(
             color = colors.cardSurface,
             modifier = Modifier.fillMaxWidth()
@@ -365,7 +435,7 @@ fun ProfileScreen(
                     VerifiedMuseumBadge()
                 }
 
-                Spacer(modifier = Modifier.height(3.dp))
+                Spacer(modifier = Modifier.height(4.dp))
 
                 // Age · Gender
                 Text(
@@ -374,7 +444,7 @@ fun ProfileScreen(
                     color = colors.mutedText
                 )
 
-                Spacer(modifier = Modifier.height(10.dp))
+                Spacer(modifier = Modifier.height(12.dp))
 
                 // Bio
                 Text(
@@ -382,37 +452,39 @@ fun ProfileScreen(
                         "Just a girl who finds beauty in meaningful conversations, art, nature and real connections. \uD83C\uDF3F"
                     },
                     style = MaterialTheme.typography.bodyMedium.copy(
-                        fontSize = 13.5.sp,
-                        lineHeight = 20.sp
+                        fontSize = 14.sp,
+                        lineHeight = 21.sp
                     ),
-                    color = colors.inkPrimary.copy(alpha = 0.86f),
+                    color = colors.inkPrimary.copy(alpha = 0.90f),
                     textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(horizontal = 10.dp)
+                    modifier = Modifier.padding(horizontal = 8.dp)
                 )
 
-                Spacer(modifier = Modifier.height(18.dp))
+                Spacer(modifier = Modifier.height(20.dp))
 
-                // Stats Row: 48 Posts | 2.6k Followers | 312 Following
+                // Stats Row: Posts | Followers | Following
                 Row(
                     horizontalArrangement = Arrangement.SpaceEvenly,
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     ProfileStatItem(
-                        value = if (ownPosts.size > 48) ownPosts.size.toString() else "48",
+                        value = if (ownPosts.isNotEmpty()) ownPosts.size.toString() else currentProfile.postCount.coerceAtLeast(ownPosts.size).toString(),
                         label = "Posts"
                     )
                     ProfileStatItem(
-                        value = "2.6k",
-                        label = "Followers"
+                        value = if (followersList.isNotEmpty()) followersList.size.toString() else formatStatCount(currentProfile.followerCount),
+                        label = "Followers",
+                        onClick = { showFollowListSheet = "followers" }
                     )
                     ProfileStatItem(
-                        value = "312",
-                        label = "Following"
+                        value = if (followingList.isNotEmpty()) followingList.size.toString() else formatStatCount(currentProfile.followingCount),
+                        label = "Following",
+                        onClick = { showFollowListSheet = "following" }
                     )
                 }
 
-                Spacer(modifier = Modifier.height(18.dp))
+                Spacer(modifier = Modifier.height(20.dp))
 
                 // Pill Outline Button: [✏️ Edit Profile]
                 ArtmuseumSecondaryButton(
@@ -525,7 +597,7 @@ fun ProfileScreen(
             activeTheme = activeTheme,
             onDismiss = { showEditProfileSheet = false },
             onSave = { name, bio, ageStr, gender, photo, palette, notif, vis ->
-                onSaveProfileChanges(name, bio, ageStr, gender, photo, palette, notif, vis)
+                onSaveProfileChanges(name, bio, ageStr, gender, photo, currentProfile.bannerURL, palette, notif, vis)
                 showEditProfileSheet = false
             },
             onSignOut = {
@@ -533,6 +605,18 @@ fun ProfileScreen(
                 onSignOut()
             },
             onRequestNotificationPermission = onShowMessage
+        )
+    }
+
+    if (showFollowListSheet != null) {
+        val sheetTitle = if (showFollowListSheet == "followers") "Followers" else "Following"
+        val userList = if (showFollowListSheet == "followers") followersList else followingList
+        FollowersFollowingSheet(
+            title = sheetTitle,
+            users = userList,
+            followingUserIds = emptySet(),
+            onToggleFollow = { _, _, _ -> },
+            onDismiss = { showFollowListSheet = null }
         )
     }
 
@@ -614,23 +698,133 @@ fun ProfileScreen(
     }
 }
 
+fun formatStatCount(count: Int): String {
+    return when {
+        count >= 1000 -> String.format(Locale.US, "%.1fk", count / 1000f)
+        else -> count.toString()
+    }
+}
+
 @Composable
-private fun ProfileStatItem(value: String, label: String) {
+private fun ProfileStatItem(
+    value: String,
+    label: String,
+    onClick: (() -> Unit)? = null
+) {
     val colors = LocalArtmuseumColors.current
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .clip(RoundedCornerShape(12.dp))
+            .then(
+                if (onClick != null) {
+                    Modifier
+                        .clickable(onClick = onClick)
+                        .padding(horizontal = 10.dp, vertical = 4.dp)
+                } else {
+                    Modifier
+                }
+            )
+    ) {
         Text(
             text = value,
             style = MaterialTheme.typography.titleMedium.copy(
                 fontWeight = FontWeight.Bold,
-                fontSize = 15.5.sp
+                fontSize = 16.sp
             ),
             color = colors.inkPrimary
         )
         Text(
             text = label,
-            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.5.sp),
+            style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
             color = colors.mutedText
         )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun FollowersFollowingSheet(
+    title: String,
+    users: List<UserFollow>,
+    followingUserIds: Set<String>,
+    onToggleFollow: (targetUid: String, targetName: String, targetPhotoURL: String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val colors = LocalArtmuseumColors.current
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = colors.cardSurface,
+        shape = ArtmuseumShapeTokens.LargeSheetTop
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .padding(horizontal = 22.dp, vertical = 12.dp)
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.headlineMedium,
+                color = colors.inkPrimary
+            )
+            Spacer(modifier = Modifier.height(14.dp))
+            if (users.isEmpty()) {
+                Text(
+                    text = "No members in $title yet.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = colors.mutedText,
+                    modifier = Modifier.padding(vertical = 16.dp)
+                )
+            } else {
+                LazyColumn(
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(300.dp)
+                ) {
+                    items(
+                        users,
+                        key = { it.documentId.ifBlank { it.followingUid.ifBlank { it.followerUid } } }
+                    ) { follow ->
+                        val targetUid = follow.followingUid.ifBlank { follow.followerUid }
+                        val isFollowing = targetUid in followingUserIds
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 6.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                ArtmuseumAvatar(
+                                    photoURL = follow.targetPhotoURL,
+                                    contentDescription = follow.targetName,
+                                    size = 40.dp
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Text(
+                                    text = follow.targetName,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = colors.inkPrimary
+                                )
+                            }
+                            ArtmuseumFilterChip(
+                                label = if (isFollowing) "Following" else "Follow",
+                                selected = isFollowing,
+                                onClick = {
+                                    onToggleFollow(targetUid, follow.targetName, follow.targetPhotoURL)
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+        }
     }
 }
 
@@ -717,7 +911,6 @@ fun EditProfileModalSheet(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Gender Selection restricted strictly to Male or Female per PRD Section 6
             Text(
                 text = "Gender",
                 style = MaterialTheme.typography.labelLarge,
@@ -744,6 +937,34 @@ fun EditProfileModalSheet(
                     .testTag("edit_bio_input")
             )
 
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Dark Mode Quick Switch
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column {
+                    Text(
+                        text = "Dark Mode",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = colors.inkPrimary
+                    )
+                    Text(
+                        text = "Switch gallery interface to dark theme",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = colors.mutedText
+                    )
+                }
+                Switch(
+                    checked = selectedPalette.isDark,
+                    onCheckedChange = { isDark ->
+                        selectedPalette = if (isDark) ArtmuseumThemePalette.MIDNIGHT else ArtmuseumThemePalette.CREAM
+                    }
+                )
+            }
+
             Spacer(modifier = Modifier.height(14.dp))
 
             Text(
@@ -764,7 +985,6 @@ fun EditProfileModalSheet(
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // Profile Visibility (public / private)
             Text(
                 text = "Profile Visibility",
                 style = MaterialTheme.typography.labelLarge,
@@ -862,10 +1082,12 @@ fun ExploreScreen(
     searchQuery: String,
     likedPostIds: Set<String>,
     savedPostIds: Set<String>,
+    followingUserIds: Set<String> = emptySet(),
     onSearchQueryChange: (String) -> Unit,
     onOpenPostDetail: (Post) -> Unit,
     onToggleLike: (Post) -> Unit,
     onToggleSave: (String) -> Unit,
+    onToggleFollowUser: ((targetUid: String, targetName: String, targetPhotoURL: String) -> Unit)? = null,
     onBackToHome: () -> Unit
 ) {
     BackHandler(onBack = onBackToHome)
@@ -963,6 +1185,7 @@ fun ExploreScreen(
                     )
                 }
                 items(matchingUsers, key = { it.uid }) { user ->
+                    val isFollowing = user.uid in followingUserIds
                     Surface(
                         shape = RoundedCornerShape(18.dp),
                         color = colors.cardSurface,
@@ -989,6 +1212,15 @@ fun ExploreScreen(
                                     text = "${user.age} · ${user.gender}",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = colors.mutedText
+                                )
+                            }
+                            if (onToggleFollowUser != null) {
+                                ArtmuseumFilterChip(
+                                    label = if (isFollowing) "Following" else "Follow",
+                                    selected = isFollowing,
+                                    onClick = {
+                                        onToggleFollowUser(user.uid, user.displayName, user.photoURL)
+                                    }
                                 )
                             }
                         }

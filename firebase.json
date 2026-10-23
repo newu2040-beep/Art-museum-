@@ -1,7 +1,7 @@
 {
   "firestore": [
     {
-      "database": "ai-studio-android-devpixel-8e153544-7d26-4e23-ae33-3dc1effc925a",
+      "database": "(default)",
       "rules": "firestore.rules"
     }
   ],

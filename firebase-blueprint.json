@@ -8,6 +8,7 @@
         "uid": { "type": "string", "description": "Owner Firebase Auth UID." },
         "displayName": { "type": "string", "description": "Display name (1-60 chars)." },
         "photoURL": { "type": "string", "description": "Avatar URL, preset identifier, or compact data URI." },
+        "bannerURL": { "type": "string", "description": "Banner artwork URL, preset identifier, or compact data URI." },
         "bio": { "type": "string", "description": "Personal bio (0-500 chars)." },
         "age": { "type": "integer", "description": "Validated integer age (13-120)." },
         "gender": { "type": "string", "enum": ["Male", "Female"], "description": "Gender selection restricted to Male or Female." },

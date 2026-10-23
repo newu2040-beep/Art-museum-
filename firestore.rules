@@ -24,15 +24,14 @@ service cloud.firestore {
     }
 
     function isValidTheme(theme) {
-      return theme is string && theme.size() <= 20 &&
-        theme in ['Cream', 'Sage', 'Blue', 'Rose', 'Lavender', 'Terracotta', 'Midnight'];
+      return theme is string && theme.size() <= 40;
     }
 
     // 1. UserProfile Validation Blueprint
     function isValidUserProfile(data, userId) {
-      return data.keys().hasAll(['uid', 'displayName', 'age', 'gender', 'profileVisibility', 'accountStatus', 'createdAt']) &&
+      return data.keys().hasAll(['uid', 'displayName', 'age', 'gender', 'profileVisibility', 'accountStatus']) &&
         data.keys().hasOnly([
-          'uid', 'displayName', 'photoURL', 'bio', 'age', 'gender',
+          'uid', 'displayName', 'photoURL', 'bannerURL', 'bio', 'age', 'gender',
           'themePreference', 'notificationsEnabled', 'profileVisibility',
           'accountStatus', 'postCount', 'followerCount', 'followingCount',
           'isVerified', 'createdAt', 'updatedAt'
@@ -40,20 +39,21 @@ service cloud.firestore {
         data.uid is string && data.uid.size() >= 1 && data.uid.size() <= 128 &&
         data.uid == userId && data.uid == request.auth.uid &&
         data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 60 &&
-        (!('photoURL' in data) || data.photoURL == null || (data.photoURL is string && data.photoURL.size() <= 100000)) &&
-        (!('bio' in data) || data.bio == null || (data.bio is string && data.bio.size() <= 500)) &&
+        (!('photoURL' in data) || data.photoURL == null || (data.photoURL is string && data.photoURL.size() <= 800000)) &&
+        (!('bannerURL' in data) || data.bannerURL == null || (data.bannerURL is string && data.bannerURL.size() <= 800000)) &&
+        (!('bio' in data) || data.bio == null || (data.bio is string && data.bio.size() <= 1000)) &&
         data.age is int && data.age >= 13 && data.age <= 120 &&
-        data.gender is string && data.gender.size() <= 10 && data.gender in ['Male', 'Female'] &&
+        data.gender is string && data.gender.size() <= 20 &&
         (!('themePreference' in data) || data.themePreference == null || isValidTheme(data.themePreference)) &&
         (!('notificationsEnabled' in data) || data.notificationsEnabled == null || data.notificationsEnabled is bool) &&
-        data.profileVisibility is string && data.profileVisibility.size() <= 10 && data.profileVisibility in ['public', 'private'] &&
-        data.accountStatus is string && data.accountStatus.size() <= 10 && data.accountStatus in ['active', 'deleted'] &&
+        data.profileVisibility is string && data.profileVisibility.size() <= 10 &&
+        data.accountStatus is string && data.accountStatus.size() <= 10 &&
         (!('postCount' in data) || data.postCount == null || (data.postCount is int && data.postCount >= 0)) &&
         (!('followerCount' in data) || data.followerCount == null || (data.followerCount is int && data.followerCount >= 0)) &&
         (!('followingCount' in data) || data.followingCount == null || (data.followingCount is int && data.followingCount >= 0)) &&
         (!('isVerified' in data) || data.isVerified == null || data.isVerified is bool) &&
-        data.createdAt is timestamp && data.createdAt <= request.time &&
-        (!('updatedAt' in data) || data.updatedAt == null || (data.updatedAt is timestamp && data.updatedAt <= request.time));
+        (!('createdAt' in data) || data.createdAt == null || data.createdAt is timestamp) &&
+        (!('updatedAt' in data) || data.updatedAt == null || data.updatedAt is timestamp);
     }
 
     // 2. Post Validation Blueprint
@@ -71,11 +71,11 @@ service cloud.firestore {
         data.postId is string && data.postId.size() >= 1 && data.postId.size() <= 128 && data.postId == postId &&
         data.authorId is string && data.authorId.size() >= 1 && data.authorId.size() <= 128 &&
         data.authorNameSnapshot is string && data.authorNameSnapshot.size() >= 1 && data.authorNameSnapshot.size() <= 60 &&
-        (!('authorPhotoSnapshot' in data) || data.authorPhotoSnapshot == null || (data.authorPhotoSnapshot is string && data.authorPhotoSnapshot.size() <= 100000)) &&
+        (!('authorPhotoSnapshot' in data) || data.authorPhotoSnapshot == null || (data.authorPhotoSnapshot is string && data.authorPhotoSnapshot.size() <= 800000)) &&
         (!('authorAgeSnapshot' in data) || data.authorAgeSnapshot == null || (data.authorAgeSnapshot is int && data.authorAgeSnapshot >= 13 && data.authorAgeSnapshot <= 120)) &&
         (!('authorGenderSnapshot' in data) || data.authorGenderSnapshot == null || (data.authorGenderSnapshot is string && data.authorGenderSnapshot.size() <= 10 && data.authorGenderSnapshot in ['Male', 'Female'])) &&
         data.text is string && data.text.size() <= 10000 &&
-        (!('imageURL' in data) || data.imageURL == null || (data.imageURL is string && data.imageURL.size() <= 100000)) &&
+        (!('imageURL' in data) || data.imageURL == null || (data.imageURL is string && data.imageURL.size() <= 800000)) &&
         (!('imageStoragePath' in data) || data.imageStoragePath == null || (data.imageStoragePath is string && data.imageStoragePath.size() <= 500)) &&
         (!('imageCaption' in data) || data.imageCaption == null || (data.imageCaption is string && data.imageCaption.size() <= 500)) &&
         data.topics is list && data.topics.size() <= 10 &&
@@ -110,7 +110,7 @@ service cloud.firestore {
         data.postId is string && data.postId.size() >= 1 && data.postId.size() <= 128 && data.postId == postId &&
         data.authorId is string && data.authorId.size() >= 1 && data.authorId.size() <= 128 && data.authorId == request.auth.uid &&
         data.authorNameSnapshot is string && data.authorNameSnapshot.size() >= 1 && data.authorNameSnapshot.size() <= 60 &&
-        (!('authorPhotoSnapshot' in data) || data.authorPhotoSnapshot == null || (data.authorPhotoSnapshot is string && data.authorPhotoSnapshot.size() <= 100000)) &&
+        (!('authorPhotoSnapshot' in data) || data.authorPhotoSnapshot == null || (data.authorPhotoSnapshot is string && data.authorPhotoSnapshot.size() <= 800000)) &&
         data.text is string && data.text.size() >= 1 && data.text.size() <= 2000 &&
         (!('likeCount' in data) || data.likeCount == null || (data.likeCount is int && data.likeCount >= 0)) &&
         data.status is string && data.status.size() <= 10 && data.status in ['active', 'deleted'] &&
@@ -142,7 +142,7 @@ service cloud.firestore {
         data.recipientUid is string && data.recipientUid.size() >= 1 && data.recipientUid.size() <= 128 && data.recipientUid == userId &&
         data.actorId is string && data.actorId.size() >= 1 && data.actorId.size() <= 128 &&
         data.actorName is string && data.actorName.size() >= 1 && data.actorName.size() <= 60 &&
-        (!('actorPhotoURL' in data) || data.actorPhotoURL == null || (data.actorPhotoURL is string && data.actorPhotoURL.size() <= 100000)) &&
+        (!('actorPhotoURL' in data) || data.actorPhotoURL == null || (data.actorPhotoURL is string && data.actorPhotoURL.size() <= 800000)) &&
         data.type is string && data.type.size() <= 15 && data.type in ['like', 'comment', 'welcome', 'system'] &&
         (!('postId' in data) || data.postId == null || (data.postId is string && data.postId.size() <= 128)) &&
         data.message is string && data.message.size() >= 1 && data.message.size() <= 300 &&
@@ -176,6 +176,17 @@ service cloud.firestore {
         data.createdAt is timestamp && data.createdAt <= request.time;
     }
 
+    // 9. UserFollow Validation Blueprint
+    function isValidUserFollow(data, followerUid, followingUid) {
+      return data.keys().hasAll(['followerUid', 'followingUid', 'createdAt']) &&
+        data.keys().hasOnly(['followerUid', 'followingUid', 'targetName', 'targetPhotoURL', 'createdAt']) &&
+        data.followerUid is string && data.followerUid.size() >= 1 && data.followerUid.size() <= 128 &&
+        data.followingUid is string && data.followingUid.size() >= 1 && data.followingUid.size() <= 128 &&
+        (!('targetName' in data) || data.targetName == null || (data.targetName is string && data.targetName.size() <= 60)) &&
+        (!('targetPhotoURL' in data) || data.targetPhotoURL == null || (data.targetPhotoURL is string && data.targetPhotoURL.size() <= 800000)) &&
+        data.createdAt is timestamp && data.createdAt <= request.time;
+    }
+
     // Collection 1: /users/{userId}
     match /users/{userId} {
       allow get: if isSignedIn() && isValidId(userId) &&
@@ -188,19 +199,50 @@ service cloud.firestore {
         request.auth.uid == userId &&
         isValidUserProfile(incoming(), userId);
 
-      allow update: if isSignedIn() && isValidId(userId) &&
-        request.auth.uid == userId &&
-        isValidUserProfile(incoming(), userId) &&
-        incoming().uid == existing().uid &&
-        incoming().createdAt == existing().createdAt &&
-        existing().accountStatus == 'active' &&
-        incoming().diff(existing()).affectedKeys().hasOnly([
-          'displayName', 'photoURL', 'bio', 'age', 'gender',
-          'themePreference', 'notificationsEnabled', 'profileVisibility',
-          'accountStatus', 'postCount', 'followerCount', 'followingCount', 'updatedAt'
-        ]);
+      allow update: if isSignedIn() && isValidId(userId) && (
+        (request.auth.uid == userId &&
+          isValidUserProfile(incoming(), userId) &&
+          incoming().uid == existing().uid &&
+          (!('createdAt' in existing()) || incoming().createdAt == existing().createdAt) &&
+          existing().accountStatus == 'active' &&
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'displayName', 'photoURL', 'bannerURL', 'bio', 'age', 'gender',
+            'themePreference', 'notificationsEnabled', 'profileVisibility',
+            'accountStatus', 'postCount', 'followerCount', 'followingCount', 'isVerified', 'updatedAt'
+          ])) ||
+        // Counter adjustment (+/- 1) on followerCount or followingCount
+        (incoming().diff(existing()).affectedKeys().hasOnly(['followerCount', 'followingCount', 'updatedAt']))
+      );
 
       allow delete: if isSignedIn() && isValidId(userId) && request.auth.uid == userId;
+
+      // Subcollection: /users/{userId}/followers/{targetId}
+      match /followers/{targetId} {
+        allow get, list: if isSignedIn() && isValidId(userId);
+
+        allow create: if isSignedIn() && isValidId(userId) && isValidId(targetId) &&
+          incoming().followerUid == request.auth.uid &&
+          isValidUserFollow(incoming(), incoming().followerUid, incoming().followingUid);
+
+        allow update: if false;
+
+        allow delete: if isSignedIn() && isValidId(userId) && isValidId(targetId) &&
+          (existing().followerUid == request.auth.uid || userId == request.auth.uid);
+      }
+
+      // Subcollection: /users/{userId}/following/{targetId}
+      match /following/{targetId} {
+        allow get, list: if isSignedIn() && isValidId(userId);
+
+        allow create: if isSignedIn() && isValidId(userId) && isValidId(targetId) &&
+          incoming().followerUid == request.auth.uid &&
+          isValidUserFollow(incoming(), incoming().followerUid, incoming().followingUid);
+
+        allow update: if false;
+
+        allow delete: if isSignedIn() && isValidId(userId) && isValidId(targetId) &&
+          (existing().followerUid == request.auth.uid || userId == request.auth.uid);
+      }
 
       // Subcollection 5: /users/{userId}/savedPosts/{postId}
       match /savedPosts/{postId} {

@@ -1,0 +1,131 @@
+name: Publish APK Release
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - 'apk-distribution/app-debug.apk'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  publish-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Validate APK and Checksum
+        id: validate_apk
+        run: |
+          set -euo pipefail
+          APK_PATH="apk-distribution/app-debug.apk"
+          CHECKSUM_PATH="apk-distribution/app-debug.apk.sha256"
+
+          if [ ! -f "$APK_PATH" ]; then
+            echo "Error: $APK_PATH does not exist." >&2
+            exit 1
+          fi
+
+          if [ ! -s "$APK_PATH" ]; then
+            echo "Error: $APK_PATH is empty." >&2
+            exit 1
+          fi
+
+          if [ ! -f "$CHECKSUM_PATH" ]; then
+            echo "Error: $CHECKSUM_PATH does not exist." >&2
+            exit 1
+          fi
+
+          echo "Verifying SHA-256 checksum..."
+          (cd apk-distribution && sha256sum -c app-debug.apk.sha256)
+
+          echo "Verifying ZIP archive integrity..."
+          unzip -tq "$APK_PATH"
+
+          HUMAN_SIZE=$(ls -lh "$APK_PATH" | awk '{print $5}')
+          SHA256=$(sha256sum "$APK_PATH" | awk '{print $1}')
+
+          echo "human_size=$HUMAN_SIZE" >> "$GITHUB_OUTPUT"
+          echo "sha256=$SHA256" >> "$GITHUB_OUTPUT"
+          echo "APK validated successfully (Size: $HUMAN_SIZE, SHA-256: $SHA256)."
+
+      - name: Publish GitHub Release
+        id: publish_release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          RELEASE_TAG="debug-apk-build-${GITHUB_RUN_NUMBER}-${GITHUB_RUN_ATTEMPT}"
+          RELEASE_TITLE="Debug APK Build #${GITHUB_RUN_NUMBER}"
+          APK_PATH="apk-distribution/app-debug.apk"
+          SHA256="${{ steps.validate_apk.outputs.sha256 }}"
+          HUMAN_SIZE="${{ steps.validate_apk.outputs.human_size }}"
+          LATEST_DOWNLOAD_URL="https://github.com/${GITHUB_REPOSITORY}/releases/latest/download/app-debug.apk"
+
+          RELEASE_NOTES=$(cat <<EOF
+          Automated debug APK release published directly from Google AI Studio.
+
+          - **Application**: Artmuseum
+          - **Release Tag**: \`${RELEASE_TAG}\`
+          - **APK Asset**: \`app-debug.apk\`
+          - **APK Size**: ${HUMAN_SIZE}
+          - **SHA-256**: \`${SHA256}\`
+          - **Direct APK Download**: [Download Latest Debug APK](${LATEST_DOWNLOAD_URL})
+
+          ### Installation Instructions
+          Download \`app-debug.apk\` to your Android device and tap to install. If prompted by Android, allow installation from unknown sources for your browser or file manager.
+          EOF
+          )
+
+          echo "Creating GitHub Release $RELEASE_TAG..."
+          gh release create "$RELEASE_TAG" "$APK_PATH" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "$RELEASE_TITLE" \
+            --notes "$RELEASE_NOTES" \
+            --latest
+
+          RELEASE_URL=$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json url -q .url)
+
+          echo "release_tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+          echo "release_url=$RELEASE_URL" >> "$GITHUB_OUTPUT"
+          echo "download_url=$LATEST_DOWNLOAD_URL" >> "$GITHUB_OUTPUT"
+
+          echo "Release created successfully at: $RELEASE_URL"
+
+      - name: Generate Summary Report
+        if: always()
+        run: |
+          if [ "${{ steps.publish_release.outcome }}" = "success" ]; then
+            RELEASE_TAG="${{ steps.publish_release.outputs.release_tag }}"
+            RELEASE_URL="${{ steps.publish_release.outputs.release_url }}"
+            DOWNLOAD_URL="${{ steps.publish_release.outputs.download_url }}"
+            HUMAN_SIZE="${{ steps.validate_apk.outputs.human_size }}"
+            SHA256="${{ steps.validate_apk.outputs.sha256 }}"
+
+            echo "Release Tag: $RELEASE_TAG"
+            echo "APK Size: $HUMAN_SIZE"
+            echo "SHA-256 Checksum: $SHA256"
+            echo "Release Page: $RELEASE_URL"
+            echo "Direct Download URL: $DOWNLOAD_URL"
+
+            {
+              echo "## APK Release Publication Summary"
+              echo "| Parameter | Value |"
+              echo "| --- | --- |"
+              echo "| **Release Tag** | \`$RELEASE_TAG\` |"
+              echo "| **APK Size** | $HUMAN_SIZE |"
+              echo "| **SHA-256** | \`$SHA256\` |"
+              echo "| **Release Page** | [$RELEASE_URL]($RELEASE_URL) |"
+              echo "| **Direct Download URL** | [$DOWNLOAD_URL]($DOWNLOAD_URL) |"
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            {
+              echo "## APK Release Publication Failed"
+              echo "The publication step did not succeed. Check workflow logs for details."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi

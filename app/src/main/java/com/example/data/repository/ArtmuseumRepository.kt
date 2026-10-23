@@ -7,6 +7,7 @@ import com.example.data.model.ArtmuseumThemePalette
 import com.example.data.model.Post
 import com.example.data.model.PostComment
 import com.example.data.model.UserBlock
+import com.example.data.model.UserFollow
 import com.example.data.model.UserProfile
 import com.example.data.remote.OperationType
 import com.example.data.remote.handleFirestoreError
@@ -30,7 +31,8 @@ import kotlinx.coroutines.tasks.await
 private fun DocumentReference.observeSnapshots(): Flow<DocumentSnapshot> = callbackFlow {
     val registration = addSnapshotListener { snapshot, error ->
         if (error != null) {
-            close(error)
+            handleFirestoreError(error, OperationType.GET, path)
+            close()
         } else if (snapshot != null) {
             trySend(snapshot)
         }
@@ -41,7 +43,8 @@ private fun DocumentReference.observeSnapshots(): Flow<DocumentSnapshot> = callb
 private fun Query.observeSnapshots(): Flow<QuerySnapshot> = callbackFlow {
     val registration = addSnapshotListener { snapshot, error ->
         if (error != null) {
-            close(error)
+            handleFirestoreError(error, OperationType.LIST, null)
+            close()
         } else if (snapshot != null) {
             trySend(snapshot)
         }
@@ -50,13 +53,20 @@ private fun Query.observeSnapshots(): Flow<QuerySnapshot> = callbackFlow {
 }
 
 class ArtmuseumRepository(
-    private val db: FirebaseFirestore,
+    private val db: FirebaseFirestore = FirebaseFirestore.getInstance(),
     private val auth: FirebaseAuth = FirebaseAuth.getInstance()
 ) {
     constructor(context: Context) : this(
-        FirebaseFirestore.getInstance(
-            context.applicationContext.getString(R.string.firestore_database_id)
-        )
+        try {
+            val dbId = context.applicationContext.getString(R.string.firestore_database_id)
+            if (dbId.isNotBlank() && dbId != "(default)" && !dbId.startsWith("ai-studio-android-devpixel")) {
+                FirebaseFirestore.getInstance(dbId)
+            } else {
+                FirebaseFirestore.getInstance()
+            }
+        } catch (_: Exception) {
+            FirebaseFirestore.getInstance()
+        }
     )
 
     private fun requireUserId(): String {
@@ -140,6 +150,7 @@ class ArtmuseumRepository(
         age: Int,
         gender: String,
         photoURL: String,
+        bannerURL: String,
         themePreference: String,
         notificationsEnabled: Boolean,
         profileVisibility: String
@@ -147,22 +158,164 @@ class ArtmuseumRepository(
         val uid = requireUserId()
         val docRef = db.collection("users").document(uid)
         try {
-            val updates = mapOf<String, Any>(
-                "displayName" to displayName.trim().ifEmpty { "Sophia" }.take(60),
-                "bio" to bio.trim().take(500),
-                "age" to age.coerceIn(13, 120),
-                "gender" to if (gender == "Male") "Male" else "Female",
-                "photoURL" to photoURL.ifBlank { "preset:avatar_sophia" },
-                "themePreference" to ArtmuseumThemePalette.fromName(themePreference).label,
-                "notificationsEnabled" to notificationsEnabled,
-                "profileVisibility" to if (profileVisibility == "private") "private" else "public",
-                "updatedAt" to FieldValue.serverTimestamp()
-            )
-            docRef.update(updates).await()
+            val existingSnap = docRef.get().await()
+            if (!existingSnap.exists()) {
+                val newProfile = UserProfile(
+                    documentId = uid,
+                    uid = uid,
+                    displayName = displayName.trim().ifEmpty { "Sophia" }.take(60),
+                    photoURL = photoURL.ifBlank { "preset:avatar_sophia" },
+                    bannerURL = bannerURL.ifBlank { "preset:profile_header" },
+                    bio = bio.trim().take(500),
+                    age = age.coerceIn(13, 120),
+                    gender = if (gender == "Male") "Male" else "Female",
+                    themePreference = ArtmuseumThemePalette.fromName(themePreference).label,
+                    notificationsEnabled = notificationsEnabled,
+                    profileVisibility = if (profileVisibility == "private") "private" else "public",
+                    accountStatus = "active"
+                )
+                docRef.set(newProfile.toCreateMap()).await()
+            } else {
+                val updates = mapOf<String, Any>(
+                    "displayName" to displayName.trim().ifEmpty { "Sophia" }.take(60),
+                    "bio" to bio.trim().take(500),
+                    "age" to age.coerceIn(13, 120),
+                    "gender" to if (gender == "Male") "Male" else "Female",
+                    "photoURL" to photoURL.ifBlank { "preset:avatar_sophia" },
+                    "bannerURL" to bannerURL.ifBlank { "preset:profile_header" },
+                    "themePreference" to ArtmuseumThemePalette.fromName(themePreference).label,
+                    "notificationsEnabled" to notificationsEnabled,
+                    "profileVisibility" to if (profileVisibility == "private") "private" else "public",
+                    "updatedAt" to FieldValue.serverTimestamp()
+                )
+                docRef.update(updates).await()
+            }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             handleFirestoreError(e, OperationType.UPDATE, docRef.path)
+            throw e
+        }
+    }
+
+    // --- 1B. Real-Time Following & Followers ---
+
+    fun observeFollowingUserIds(userId: String): Flow<Set<String>> {
+        val path = "users/$userId/following"
+        return db.collection("users").document(userId).collection("following")
+            .whereEqualTo("followerUid", userId)
+            .observeSnapshots()
+            .map { snapshot ->
+                snapshot.documents.mapNotNull { it.getString("followingUid") ?: it.id }.toSet()
+            }
+            .catch { error ->
+                if (error is Exception) handleFirestoreError(error, OperationType.LIST, path)
+                emit(emptySet())
+            }
+    }
+
+    fun observeFollowers(userId: String): Flow<List<UserFollow>> {
+        val path = "users/$userId/followers"
+        return db.collection("users").document(userId).collection("followers")
+            .whereEqualTo("followingUid", userId)
+            .observeSnapshots()
+            .map { snapshot ->
+                snapshot.documents.mapNotNull { UserFollow.fromSnapshot(it) }
+            }
+            .catch { error ->
+                if (error is Exception) handleFirestoreError(error, OperationType.LIST, path)
+                emit(emptyList())
+            }
+    }
+
+    fun observeFollowing(userId: String): Flow<List<UserFollow>> {
+        val path = "users/$userId/following"
+        return db.collection("users").document(userId).collection("following")
+            .whereEqualTo("followerUid", userId)
+            .observeSnapshots()
+            .map { snapshot ->
+                snapshot.documents.mapNotNull { UserFollow.fromSnapshot(it) }
+            }
+            .catch { error ->
+                if (error is Exception) handleFirestoreError(error, OperationType.LIST, path)
+                emit(emptyList())
+            }
+    }
+
+    suspend fun toggleFollowUser(
+        targetUid: String,
+        targetName: String,
+        targetPhotoURL: String,
+        actorProfile: UserProfile
+    ): Result<Boolean> = runCatching {
+        val currentUid = requireUserId()
+        require(currentUid != targetUid) { "Cannot follow yourself" }
+
+        val myFollowingRef = db.collection("users").document(currentUid).collection("following").document(targetUid)
+        val targetFollowerRef = db.collection("users").document(targetUid).collection("followers").document(currentUid)
+        val myUserRef = db.collection("users").document(currentUid)
+        val targetUserRef = db.collection("users").document(targetUid)
+
+        try {
+            val isFollowingSnap = myFollowingRef.get().await()
+            if (isFollowingSnap.exists()) {
+                // Unfollow
+                myFollowingRef.delete().await()
+                targetFollowerRef.delete().await()
+
+                val mySnap = myUserRef.get().await()
+                val targetSnap = targetUserRef.get().await()
+
+                val currentMyFollowing = (mySnap.getLong("followingCount") ?: 1L).toInt()
+                val currentTargetFollowers = (targetSnap.getLong("followerCount") ?: 1L).toInt()
+
+                myUserRef.update("followingCount", (currentMyFollowing - 1).coerceAtLeast(0)).await()
+                targetUserRef.update("followerCount", (currentTargetFollowers - 1).coerceAtLeast(0)).await()
+
+                false
+            } else {
+                // Follow
+                val followDataForMe = mapOf(
+                    "followerUid" to currentUid,
+                    "followingUid" to targetUid,
+                    "targetName" to targetName.ifBlank { "Museum Member" },
+                    "targetPhotoURL" to targetPhotoURL.ifBlank { "preset:avatar_sophia" },
+                    "createdAt" to FieldValue.serverTimestamp()
+                )
+                val followDataForTarget = mapOf(
+                    "followerUid" to currentUid,
+                    "followingUid" to targetUid,
+                    "targetName" to actorProfile.displayName.ifBlank { "Sophia" },
+                    "targetPhotoURL" to actorProfile.photoURL.ifBlank { "preset:avatar_sophia" },
+                    "createdAt" to FieldValue.serverTimestamp()
+                )
+
+                myFollowingRef.set(followDataForMe).await()
+                targetFollowerRef.set(followDataForTarget).await()
+
+                val mySnap = myUserRef.get().await()
+                val targetSnap = targetUserRef.get().await()
+
+                val currentMyFollowing = (mySnap.getLong("followingCount") ?: 0L).toInt()
+                val currentTargetFollowers = (targetSnap.getLong("followerCount") ?: 0L).toInt()
+
+                myUserRef.update("followingCount", currentMyFollowing + 1).await()
+                targetUserRef.update("followerCount", currentTargetFollowers + 1).await()
+
+                // Notify target user
+                createNotification(
+                    recipientUid = targetUid,
+                    actorProfile = actorProfile,
+                    type = "system",
+                    message = "${actorProfile.displayName} started following your museum gallery."
+                )
+
+                true
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.WRITE, myFollowingRef.path)
             throw e
         }
     }

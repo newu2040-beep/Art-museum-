@@ -21,7 +21,13 @@ enum class ArtmuseumThemePalette(
     ROSE("Rose", 0xFFF7EFEF, 0xFFFFFAFA, 0xFFA86458, 0xFFC98779),
     LAVENDER("Lavender", 0xFFF2EFF6, 0xFFFCFAFF, 0xFF7A6D94, 0xFF9688B0),
     TERRACOTTA("Terracotta", 0xFFF6EDE8, 0xFFFFF9F5, 0xFFA1583E, 0xFFB86E52),
-    MIDNIGHT("Midnight", 0xFF1F2326, 0xFF292E32, 0xFFA5B599, 0xFF4B5645, isDark = true);
+    SUNSET("Sunset", 0xFFFAF0E6, 0xFFFFFBF7, 0xFFC26D43, 0xFFD88055),
+    OLIVE("Olive Grove", 0xFFEFF1E8, 0xFFF9FAF5, 0xFF4A563E, 0xFF5B694D),
+    MIDNIGHT("Midnight", 0xFF1F2326, 0xFF292E32, 0xFFA5B599, 0xFF4B5645, isDark = true),
+    OBSIDIAN("Obsidian Gold", 0xFF121214, 0xFF1C1C20, 0xFFD4AF37, 0xFF3D3A2B, isDark = true),
+    DARK_EMERALD("Dark Emerald", 0xFF111E18, 0xFF1A2B23, 0xFF7CA982, 0xFF2D4738, isDark = true),
+    DARK_AMETHYST("Dark Amethyst", 0xFF181421, 0xFF231E30, 0xFFAD96DC, 0xFF3C3152, isDark = true),
+    DARK_CHARCOAL("Dark Charcoal", 0xFF1A1A1D, 0xFF252529, 0xFFE07A5F, 0xFF423B38, isDark = true);
 
     companion object {
         fun fromName(name: String?): ArtmuseumThemePalette {
@@ -101,6 +107,7 @@ data class UserProfile(
     val uid: String = "",
     val displayName: String = "",
     val photoURL: String = "preset:avatar_sophia",
+    val bannerURL: String = "preset:profile_header",
     val bio: String = "",
     val age: Int = 23,
     val gender: String = "Female",
@@ -120,6 +127,7 @@ data class UserProfile(
             "uid" to uid,
             "displayName" to displayName.trim().take(60),
             "photoURL" to photoURL,
+            "bannerURL" to bannerURL,
             "bio" to bio.trim().take(500),
             "age" to age.coerceIn(13, 120),
             "gender" to if (gender == "Male") "Male" else "Female",
@@ -146,6 +154,7 @@ data class UserProfile(
                 uid = uid,
                 displayName = displayName,
                 photoURL = doc.getString("photoURL") ?: "preset:avatar_sophia",
+                bannerURL = doc.getString("bannerURL") ?: "preset:profile_header",
                 bio = doc.getString("bio") ?: "",
                 age = (doc.getLong("age") ?: 23L).toInt(),
                 gender = doc.getString("gender") ?: "Female",
@@ -159,6 +168,30 @@ data class UserProfile(
                 isVerified = doc.getBoolean("isVerified") ?: true,
                 createdAt = doc.getTimestamp("createdAt", DocumentSnapshot.ServerTimestampBehavior.ESTIMATE),
                 updatedAt = doc.getTimestamp("updatedAt", DocumentSnapshot.ServerTimestampBehavior.ESTIMATE)
+            )
+        }
+    }
+}
+
+@IgnoreExtraProperties
+data class UserFollow(
+    @DocumentId val documentId: String = "",
+    val followerUid: String = "",
+    val followingUid: String = "",
+    val targetName: String = "",
+    val targetPhotoURL: String = "preset:avatar_sophia",
+    @ServerTimestamp val createdAt: Timestamp? = null
+) {
+    companion object {
+        fun fromSnapshot(doc: DocumentSnapshot): UserFollow? {
+            if (!doc.exists()) return null
+            return UserFollow(
+                documentId = doc.id,
+                followerUid = doc.getString("followerUid") ?: "",
+                followingUid = doc.getString("followingUid") ?: doc.id,
+                targetName = doc.getString("targetName") ?: "Museum Member",
+                targetPhotoURL = doc.getString("targetPhotoURL") ?: "preset:avatar_sophia",
+                createdAt = doc.getTimestamp("createdAt", DocumentSnapshot.ServerTimestampBehavior.ESTIMATE)
             )
         }
     }

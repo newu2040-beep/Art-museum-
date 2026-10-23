@@ -54,22 +54,22 @@ fun MyApplicationTheme(
     darkTheme: Boolean = isSystemInDarkTheme() || palette.isDark,
     content: @Composable () -> Unit
 ) {
-    val useDark = palette == ArtmuseumThemePalette.MIDNIGHT || (darkTheme && palette == ArtmuseumThemePalette.MIDNIGHT)
-    val bg = if (useDark) MidnightBackground else Color(palette.primaryBackgroundHex)
-    val card = if (useDark) MidnightSurface else Color(palette.cardSurfaceHex)
-    val subtle = if (useDark) MidnightElevated else WarmPaperSubtle
-    val primaryAccent = if (useDark) Color(0xFF8F9E84) else Color(palette.accentHex)
-    val pillFill = if (useDark) Color(0xFF4B5645) else Color(palette.chipFillHex)
-    val ink = if (useDark) MidnightInk else InkPrimary
-    val muted = if (useDark) MidnightTaupe else MutedTaupe
-    val border = if (useDark) MidnightBorder else MuseumBorder
+    val useDark = palette.isDark || darkTheme
+    val bg = if (useDark) Color(palette.primaryBackgroundHex) else Color(palette.primaryBackgroundHex)
+    val card = if (useDark) Color(palette.cardSurfaceHex) else Color(palette.cardSurfaceHex)
+    val subtle = if (useDark) Color(0xFF33383E) else WarmPaperSubtle
+    val primaryAccent = Color(palette.accentHex)
+    val pillFill = Color(palette.chipFillHex)
+    val ink = if (useDark) Color(0xFFECEFF1) else InkPrimary
+    val muted = if (useDark) Color(0xFFA1AAB0) else MutedTaupe
+    val border = if (useDark) Color(0xFF3D444A) else MuseumBorder
 
     val colorScheme = if (useDark) {
         darkColorScheme(
             primary = primaryAccent,
-            onPrimary = MidnightInk,
+            onPrimary = Color(0xFF121214),
             secondary = GallerySage,
-            onSecondary = MidnightInk,
+            onSecondary = Color(0xFF121214),
             tertiary = AgedGold,
             background = bg,
             onBackground = ink,
@@ -102,10 +102,10 @@ fun MyApplicationTheme(
         cardSurface = card,
         subtleSurface = subtle,
         pillSelectedFill = pillFill,
-        pillSelectedText = WarmPaper,
+        pillSelectedText = if (useDark) Color(0xFFF5F7F8) else WarmPaper,
         pillUnselectedFill = subtle,
         pillUnselectedText = ink,
-        navActivePill = if (useDark) Color(0xFF5A5248) else NavPillBrown,
+        navActivePill = if (useDark) Color(0xFF424A52) else NavPillBrown,
         inkPrimary = ink,
         mutedText = muted,
         border = border,
