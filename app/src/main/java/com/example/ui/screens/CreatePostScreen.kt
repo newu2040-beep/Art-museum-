@@ -76,6 +76,7 @@ import com.example.ui.components.ArtmuseumThemeSwatch
 import com.example.ui.components.ArtmuseumTopicChip
 import com.example.ui.theme.ArtmuseumShapeTokens
 import com.example.ui.theme.LocalArtmuseumColors
+import com.example.ui.theme.LocalArtmuseumDimensions
 import com.example.ui.theme.OlivePillActive
 import com.example.ui.theme.PlayfairDisplayFontFamily
 import com.example.ui.theme.WarmPaper
@@ -102,6 +103,7 @@ fun CreatePostScreen(
     BackHandler(onBack = onBack)
 
     val colors = LocalArtmuseumColors.current
+    val dimens = LocalArtmuseumDimensions.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
@@ -216,41 +218,41 @@ fun CreatePostScreen(
                     enabled = !isSubmitting && !isEncodingImage,
                     shape = ArtmuseumShapeTokens.Pill,
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = OlivePillActive,
-                        contentColor = WarmPaper
+                        containerColor = colors.pillSelectedFill,
+                        contentColor = colors.pillSelectedText
                     ),
-                    contentPadding = PaddingValues(horizontal = 22.dp, vertical = 8.dp),
+                    contentPadding = PaddingValues(horizontal = if (dimens.isCompact) 16.dp else 22.dp, vertical = 6.dp),
                     modifier = Modifier
-                        .height(38.dp)
+                        .height(if (dimens.isCompact) 34.dp else 38.dp)
                         .testTag("publish_post_button")
                 ) {
                     if (isSubmitting) {
                         CircularProgressIndicator(
                             modifier = Modifier.size(16.dp),
-                            color = WarmPaper,
+                            color = colors.pillSelectedText,
                             strokeWidth = 2.dp
                         )
                     } else {
                         Text(
                             text = "Post",
                             style = MaterialTheme.typography.labelLarge.copy(
-                                fontWeight = FontWeight.Medium,
-                                fontSize = 14.sp
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = if (dimens.isCompact) 13.sp else 14.sp
                             ),
-                            color = WarmPaper
+                            color = colors.pillSelectedText
                         )
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(if (dimens.isCompact) 10.dp else 16.dp))
 
             // Rounded Artwork Preview Card with circular X button at top-right (Matches Screen 4 of mockup)
             if (selectedImageSource.isNotBlank()) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(216.dp)
+                        .height(if (dimens.isCompact) 160.dp else 216.dp)
                         .clip(ArtmuseumShapeTokens.Card)
                 ) {
                     ArtmuseumArtworkImage(

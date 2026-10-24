@@ -104,7 +104,8 @@ service cloud.firestore {
       return data.keys().hasAll(['commentId', 'postId', 'authorId', 'authorNameSnapshot', 'text', 'status', 'createdAt']) &&
         data.keys().hasOnly([
           'commentId', 'postId', 'authorId', 'authorNameSnapshot', 'authorPhotoSnapshot',
-          'text', 'likeCount', 'status', 'createdAt', 'updatedAt'
+          'text', 'likeCount', 'status', 'createdAt', 'updatedAt',
+          'parentCommentId', 'replyToAuthor'
         ]) &&
         data.commentId is string && data.commentId.size() >= 1 && data.commentId.size() <= 128 && data.commentId == commentId &&
         data.postId is string && data.postId.size() >= 1 && data.postId.size() <= 128 && data.postId == postId &&
@@ -113,6 +114,8 @@ service cloud.firestore {
         (!('authorPhotoSnapshot' in data) || data.authorPhotoSnapshot == null || (data.authorPhotoSnapshot is string && data.authorPhotoSnapshot.size() <= 800000)) &&
         data.text is string && data.text.size() >= 1 && data.text.size() <= 2000 &&
         (!('likeCount' in data) || data.likeCount == null || (data.likeCount is int && data.likeCount >= 0)) &&
+        (!('parentCommentId' in data) || data.parentCommentId == null || (data.parentCommentId is string && data.parentCommentId.size() <= 128)) &&
+        (!('replyToAuthor' in data) || data.replyToAuthor == null || (data.replyToAuthor is string && data.replyToAuthor.size() <= 60)) &&
         data.status is string && data.status.size() <= 10 && data.status in ['active', 'deleted'] &&
         data.createdAt is timestamp && data.createdAt <= request.time &&
         (!('updatedAt' in data) || data.updatedAt == null || (data.updatedAt is timestamp && data.updatedAt <= request.time));
@@ -411,6 +414,19 @@ service cloud.firestore {
         isValidContentReport(incoming(), reportId);
 
       allow update, delete: if false;
+    }
+
+    // Collection 9: /chats/{chatId} (Direct Messages)
+    match /chats/{chatId} {
+      allow get, list: if isSignedIn() && isValidId(chatId);
+      allow create, update: if isSignedIn() && isValidId(chatId);
+      allow delete: if false;
+
+      match /messages/{messageId} {
+        allow get, list: if isSignedIn() && isValidId(chatId) && isValidId(messageId);
+        allow create: if isSignedIn() && isValidId(chatId) && isValidId(messageId);
+        allow update, delete: if false;
+      }
     }
   }
 }

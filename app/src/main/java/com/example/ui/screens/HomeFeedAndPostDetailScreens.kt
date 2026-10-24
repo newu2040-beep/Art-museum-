@@ -30,12 +30,16 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.outlined.Block
+import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -62,6 +66,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.ARTMUSEUM_FEED_FILTERS
@@ -75,14 +80,17 @@ import com.example.ui.components.ArtmuseumFilterChip
 import com.example.ui.components.ArtmuseumIconButton
 import com.example.ui.components.ArtmuseumOliveEmblem
 import com.example.ui.components.ArtmuseumPostCard
+import com.example.ui.components.ArtmuseumPrimaryButton
 import com.example.ui.components.ArtmuseumTopicChip
 import com.example.ui.components.PostEngagementPillRow
 import com.example.ui.theme.ArtmuseumShapeTokens
 import com.example.ui.theme.HeartCrimson
 import com.example.ui.theme.LocalArtmuseumColors
+import com.example.ui.theme.LocalArtmuseumDimensions
 import com.example.ui.theme.OlivePillActive
 import com.example.ui.theme.PlayfairDisplayFontFamily
 import com.example.ui.theme.WarmPaper
+import com.example.ui.components.VideoBanner
 import com.example.ui.viewmodel.UiState
 import java.util.Locale
 
@@ -94,6 +102,7 @@ fun HomeFeedScreen(
     likedPostIds: Set<String>,
     savedPostIds: Set<String>,
     unreadNotificationCount: Int,
+    unreadMessageCount: Int = 0,
     onSelectFilter: (String) -> Unit,
     onOpenPostDetail: (Post) -> Unit,
     onToggleLike: (Post) -> Unit,
@@ -101,13 +110,17 @@ fun HomeFeedScreen(
     onOpenCreatePost: () -> Unit,
     onOpenSearch: () -> Unit,
     onOpenNotifications: () -> Unit,
+    onOpenDirectMessages: () -> Unit,
     onOpenProfile: () -> Unit,
     onReportPost: (Post) -> Unit,
     onBlockAuthor: (Post) -> Unit,
     onDeleteOwnPost: (Post) -> Unit,
-    currentUserId: String
+    currentUserId: String,
+    isGuest: Boolean = false,
+    onGuestPrompt: () -> Unit = {}
 ) {
     val colors = LocalArtmuseumColors.current
+    val dimens = LocalArtmuseumDimensions.current
     val context = LocalContext.current
     var activeMenuPost by remember { mutableStateOf<Post?>(null) }
 
@@ -121,28 +134,62 @@ fun HomeFeedScreen(
                 .fillMaxSize()
                 .statusBarsPadding()
         ) {
-            // Top Bar (Matches Screen 2 of mockup: Circular Olive Emblem + "Artmuseum" serif + Search icon + Notifications + Profile Avatar)
+            // Responsive Top Bar (Adapts cleanly to small and standard screens)
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 18.dp, vertical = 10.dp)
+                    .padding(
+                        horizontal = dimens.horizontalPadding,
+                        vertical = if (dimens.isCompact) 6.dp else 10.dp
+                    )
             ) {
                 ArtmuseumOliveEmblem(
-                    size = 34.dp,
+                    size = if (dimens.isCompact) 28.dp else 34.dp,
                     showCircleMedallion = true
                 )
-                Spacer(modifier = Modifier.width(10.dp))
-                Text(
-                    text = "Artmuseum",
-                    style = MaterialTheme.typography.headlineMedium.copy(
-                        fontFamily = PlayfairDisplayFontFamily,
-                        fontWeight = FontWeight.Medium,
-                        fontSize = 22.sp
-                    ),
-                    color = colors.inkPrimary,
+                Spacer(modifier = Modifier.width(if (dimens.isCompact) 8.dp else 10.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.weight(1f)
-                )
+                ) {
+                    Text(
+                        text = "Artmuseum",
+                        style = MaterialTheme.typography.headlineMedium.copy(
+                            fontFamily = PlayfairDisplayFontFamily,
+                            fontWeight = FontWeight.Medium,
+                            fontSize = dimens.headerTitleSize
+                        ),
+                        color = colors.inkPrimary
+                    )
+                    if (isGuest) {
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Surface(
+                            shape = ArtmuseumShapeTokens.Pill,
+                            color = colors.pillSelectedFill.copy(alpha = 0.15f),
+                            border = BorderStroke(0.6.dp, colors.pillSelectedFill.copy(alpha = 0.35f)),
+                            modifier = Modifier
+                                .clip(ArtmuseumShapeTokens.Pill)
+                                .clickable(onClick = onGuestPrompt)
+                        ) {
+                            Text(
+                                text = "Guest",
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontSize = if (dimens.isCompact) 9.5.sp else 11.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                ),
+                                color = colors.pillSelectedFill,
+                                modifier = Modifier.padding(
+                                    horizontal = if (dimens.isCompact) 6.dp else 8.dp,
+                                    vertical = 2.dp
+                                )
+                            )
+                        }
+                    }
+                }
+
+                val iconBtnSize = if (dimens.isCompact) 32.dp else 38.dp
+                val iconGlyphSize = if (dimens.isCompact) 18.dp else 20.dp
 
                 // Search Icon Button
                 Icon(
@@ -150,18 +197,45 @@ fun HomeFeedScreen(
                     contentDescription = "Search exhibits",
                     tint = colors.inkPrimary,
                     modifier = Modifier
-                        .size(38.dp)
+                        .size(iconBtnSize)
                         .clip(CircleShape)
                         .clickable(onClick = onOpenSearch)
-                        .padding(8.dp)
+                        .padding(if (dimens.isCompact) 5.dp else 8.dp)
                         .testTag("home_search_button")
                 )
+
+                // Direct Messages Icon Button with Unread Badge
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .size(iconBtnSize)
+                        .clip(CircleShape)
+                        .clickable(onClick = onOpenDirectMessages)
+                        .testTag("home_direct_messages_button")
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.ChatBubbleOutline,
+                        contentDescription = "Direct Messages",
+                        tint = colors.inkPrimary,
+                        modifier = Modifier.size(iconGlyphSize)
+                    )
+                    if (unreadMessageCount > 0) {
+                        Box(
+                            modifier = Modifier
+                                .size(7.dp)
+                                .align(Alignment.TopEnd)
+                                .offset(x = (-4).dp, y = 4.dp)
+                                .clip(CircleShape)
+                                .background(HeartCrimson)
+                        )
+                    }
+                }
 
                 // Notification Bell with Unread Badge
                 Box(
                     contentAlignment = Alignment.Center,
                     modifier = Modifier
-                        .size(38.dp)
+                        .size(iconBtnSize)
                         .clip(CircleShape)
                         .clickable(onClick = onOpenNotifications)
                         .testTag("home_notifications_button")
@@ -170,26 +244,26 @@ fun HomeFeedScreen(
                         imageVector = Icons.Outlined.Notifications,
                         contentDescription = "Notifications",
                         tint = colors.inkPrimary,
-                        modifier = Modifier.size(21.dp)
+                        modifier = Modifier.size(iconGlyphSize)
                     )
                     if (unreadNotificationCount > 0) {
                         Box(
                             modifier = Modifier
-                                .size(8.dp)
+                                .size(7.dp)
                                 .align(Alignment.TopEnd)
-                                .offset(x = (-7).dp, y = 7.dp)
+                                .offset(x = (-4).dp, y = 4.dp)
                                 .clip(CircleShape)
                                 .background(HeartCrimson)
                         )
                     }
                 }
 
-                Spacer(modifier = Modifier.width(6.dp))
+                Spacer(modifier = Modifier.width(if (dimens.isCompact) 4.dp else 6.dp))
 
                 ArtmuseumAvatar(
                     photoURL = userProfile?.photoURL ?: "preset:avatar_sophia",
                     contentDescription = "Your profile",
-                    size = 34.dp,
+                    size = dimens.avatarSizeSmall,
                     onClick = onOpenProfile,
                     modifier = Modifier.testTag("home_avatar_button")
                 )
@@ -197,7 +271,7 @@ fun HomeFeedScreen(
 
             // Horizontal Pill Filter Row: For You, Life, Love, Courage, Growth, Peace, Art
             LazyRow(
-                contentPadding = PaddingValues(horizontal = 18.dp, vertical = 6.dp),
+                contentPadding = PaddingValues(horizontal = dimens.horizontalPadding, vertical = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
@@ -239,42 +313,100 @@ fun HomeFeedScreen(
                 }
 
                 is UiState.Success -> {
-                    if (feedState.data.isEmpty()) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(32.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                ArtmuseumOliveEmblem(size = 48.dp)
-                                Spacer(modifier = Modifier.height(12.dp))
-                                Text(
-                                    text = "No exhibits in '$selectedFilter' yet",
-                                    style = MaterialTheme.typography.titleLarge,
-                                    color = colors.inkPrimary
-                                )
-                                Spacer(modifier = Modifier.height(6.dp))
-                                Text(
-                                    text = "Share a sincere thought or painting to begin this gallery.",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = colors.mutedText
-                                )
-                            }
+                    LazyColumn(
+                        contentPadding = PaddingValues(
+                            start = dimens.horizontalPadding,
+                            end = dimens.horizontalPadding,
+                            top = 4.dp,
+                            bottom = 100.dp
+                        ),
+                        verticalArrangement = Arrangement.spacedBy(if (dimens.isCompact) 10.dp else 14.dp),
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .testTag("home_feed_list")
+                    ) {
+                        item(key = "home_video_banner") {
+                            VideoBanner(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("home_video_banner")
+                            )
                         }
-                    } else {
-                        LazyColumn(
-                            contentPadding = PaddingValues(
-                                start = 16.dp,
-                                end = 16.dp,
-                                top = 6.dp,
-                                bottom = 104.dp
-                            ),
-                            verticalArrangement = Arrangement.spacedBy(14.dp),
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .testTag("home_feed_list")
-                        ) {
+
+                        if (feedState.data.isEmpty()) {
+                            item(key = "home_empty_state") {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = if (dimens.isCompact) 20.dp else 36.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Surface(
+                                        shape = ArtmuseumShapeTokens.Card,
+                                        color = colors.cardSurface,
+                                        border = BorderStroke(0.6.dp, colors.border),
+                                        shadowElevation = 1.dp,
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Column(
+                                            horizontalAlignment = Alignment.CenterHorizontally,
+                                            modifier = Modifier.padding(horizontal = 20.dp, vertical = 24.dp)
+                                        ) {
+                                            Box(
+                                                contentAlignment = Alignment.Center,
+                                                modifier = Modifier
+                                                    .size(if (dimens.isCompact) 46.dp else 54.dp)
+                                                    .clip(CircleShape)
+                                                    .background(colors.subtleSurface)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Outlined.Palette,
+                                                    contentDescription = null,
+                                                    tint = colors.pillSelectedFill,
+                                                    modifier = Modifier.size(if (dimens.isCompact) 24.dp else 28.dp)
+                                                )
+                                            }
+                                            Spacer(modifier = Modifier.height(12.dp))
+                                            Text(
+                                                text = if (selectedFilter == "For You") "The Gallery is Open" else "No Exhibits in '$selectedFilter'",
+                                                style = MaterialTheme.typography.titleLarge.copy(
+                                                    fontFamily = PlayfairDisplayFontFamily,
+                                                    fontWeight = FontWeight.Bold,
+                                                    fontSize = if (dimens.isCompact) 18.sp else 20.sp
+                                                ),
+                                                color = colors.inkPrimary,
+                                                textAlign = TextAlign.Center
+                                            )
+                                            Spacer(modifier = Modifier.height(6.dp))
+                                            Text(
+                                                text = "Every exhibit here is created in real time by museum visitors. Tap + below to publish the first artwork or thought.",
+                                                style = MaterialTheme.typography.bodyMedium.copy(
+                                                    fontSize = if (dimens.isCompact) 12.5.sp else 13.5.sp,
+                                                    lineHeight = 19.sp
+                                                ),
+                                                color = colors.mutedText,
+                                                textAlign = TextAlign.Center
+                                            )
+                                            Spacer(modifier = Modifier.height(16.dp))
+                                            ArtmuseumPrimaryButton(
+                                                text = "Publish First Exhibit",
+                                                onClick = onOpenCreatePost,
+                                                leadingContent = {
+                                                    Icon(
+                                                        imageVector = Icons.Filled.Add,
+                                                        contentDescription = null,
+                                                        tint = Color.White,
+                                                        modifier = Modifier.size(16.dp)
+                                                    )
+                                                },
+                                                modifier = Modifier.fillMaxWidth(0.9f),
+                                                testTag = "empty_feed_create_button"
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        } else {
                             items(feedState.data, key = { it.postId }) { post ->
                                 Box {
                                     ArtmuseumPostCard(
@@ -354,23 +486,26 @@ fun HomeFeedScreen(
             }
         }
 
-        // Floating Circular Olive "+" FAB above bottom right (Matches Screen 2 of mockup)
+        // Floating Circular "+" FAB positioned comfortably above the bottom navigation bar
         FloatingActionButton(
             onClick = onOpenCreatePost,
             shape = CircleShape,
-            containerColor = OlivePillActive,
-            contentColor = WarmPaper,
-            elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 4.dp),
+            containerColor = colors.pillSelectedFill,
+            contentColor = Color.White,
+            elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 5.dp),
             modifier = Modifier
                 .align(Alignment.BottomEnd)
-                .padding(end = 20.dp, bottom = 84.dp)
-                .size(52.dp)
+                .padding(
+                    end = if (dimens.isCompact) 14.dp else 20.dp,
+                    bottom = if (dimens.isCompact) 16.dp else 22.dp
+                )
+                .size(if (dimens.isCompact) 46.dp else 54.dp)
                 .testTag("fab_create_post")
         ) {
             Icon(
                 imageVector = Icons.Filled.Add,
                 contentDescription = "Create post",
-                modifier = Modifier.size(26.dp)
+                modifier = Modifier.size(if (dimens.isCompact) 22.dp else 28.dp)
             )
         }
     }
@@ -387,8 +522,10 @@ fun PostDetailScreen(
     onBack: () -> Unit,
     onToggleLike: () -> Unit,
     onToggleSave: () -> Unit,
-    onSendComment: (String) -> Unit,
+    onSendComment: (text: String, parentCommentId: String?, replyToAuthor: String?) -> Unit,
     onDeleteComment: (String) -> Unit,
+    onToggleCommentLike: (String) -> Unit = {},
+    onMessageAuthor: (peerUid: String, peerName: String, peerPhoto: String) -> Unit = { _, _, _ -> },
     onReportPost: () -> Unit,
     onDeletePost: () -> Unit
 ) {
@@ -397,6 +534,7 @@ fun PostDetailScreen(
     val colors = LocalArtmuseumColors.current
     val context = LocalContext.current
     var commentText by remember { mutableStateOf("") }
+    var replyingToComment by remember { mutableStateOf<PostComment?>(null) }
     var showOverflowMenu by remember { mutableStateOf(false) }
 
     Box(
@@ -532,6 +670,46 @@ fun PostDetailScreen(
                                 color = colors.mutedText
                             )
                         }
+
+                        if (post.authorId != currentUserId) {
+                            Spacer(modifier = Modifier.weight(1f))
+                            Surface(
+                                shape = ArtmuseumShapeTokens.Pill,
+                                color = colors.subtleSurface,
+                                border = BorderStroke(0.8.dp, colors.border),
+                                modifier = Modifier
+                                    .clip(ArtmuseumShapeTokens.Pill)
+                                    .clickable {
+                                        onMessageAuthor(
+                                            post.authorId,
+                                            post.authorNameSnapshot,
+                                            post.authorPhotoSnapshot
+                                        )
+                                    }
+                                    .testTag("post_detail_message_author_button")
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Outlined.ChatBubbleOutline,
+                                        contentDescription = null,
+                                        tint = colors.inkPrimary,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(5.dp))
+                                    Text(
+                                        text = "Message",
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            fontWeight = FontWeight.SemiBold,
+                                            fontSize = 11.5.sp
+                                        ),
+                                        color = colors.inkPrimary
+                                    )
+                                }
+                            }
+                        }
                     }
 
                     Spacer(modifier = Modifier.height(16.dp))
@@ -597,18 +775,56 @@ fun PostDetailScreen(
                     HorizontalDivider(color = colors.border.copy(alpha = 0.65f))
                     Spacer(modifier = Modifier.height(14.dp))
 
-                    // Comments List (Matches Arjun 2h / "This is so true. Beautifully said. ✨" + ♡ 48)
-                    comments.forEach { comment ->
+                    // Comments List with Replies Support
+                    val rootComments = comments.filter { it.parentCommentId.isNullOrBlank() }
+                    val repliesByParent = comments.filter { !it.parentCommentId.isNullOrBlank() }
+                        .groupBy { it.parentCommentId!! }
+
+                    val sortedComments = buildList {
+                        rootComments.forEach { root ->
+                            add(root)
+                            repliesByParent[root.commentId]?.forEach { reply ->
+                                add(reply)
+                            }
+                        }
+                        // Any remaining replies whose parent isn't in root list
+                        comments.filter { !it.parentCommentId.isNullOrBlank() && it.parentCommentId !in rootComments.map { r -> r.commentId } }.forEach {
+                            if (it !in this) add(it)
+                        }
+                    }
+
+                    if (sortedComments.isEmpty()) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 18.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "No comments yet. Share your reflection below.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = colors.mutedText
+                            )
+                        }
+                    }
+
+                    sortedComments.forEach { comment ->
+                        val isReply = !comment.parentCommentId.isNullOrBlank()
                         Row(
                             verticalAlignment = Alignment.Top,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(vertical = 8.dp)
+                                .padding(
+                                    start = if (isReply) 28.dp else 0.dp,
+                                    top = 6.dp,
+                                    bottom = 6.dp
+                                )
+                                .testTag("comment_${comment.commentId}")
                         ) {
                             ArtmuseumAvatar(
                                 photoURL = comment.authorPhotoSnapshot,
                                 contentDescription = comment.authorNameSnapshot,
-                                size = 34.dp
+                                size = if (isReply) 28.dp else 34.dp
                             )
                             Spacer(modifier = Modifier.width(10.dp))
                             Column(modifier = Modifier.weight(1f)) {
@@ -621,6 +837,17 @@ fun PostDetailScreen(
                                         ),
                                         color = colors.inkPrimary
                                     )
+                                    if (isReply && !comment.replyToAuthor.isNullOrBlank()) {
+                                        Spacer(modifier = Modifier.width(5.dp))
+                                        Text(
+                                            text = "↳ @${comment.replyToAuthor}",
+                                            style = MaterialTheme.typography.labelSmall.copy(
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Medium
+                                            ),
+                                            color = colors.pillSelectedFill
+                                        )
+                                    }
                                     Spacer(modifier = Modifier.width(6.dp))
                                     Text(
                                         text = "2h",
@@ -634,15 +861,54 @@ fun PostDetailScreen(
                                     style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.5.sp),
                                     color = colors.inkPrimary.copy(alpha = 0.9f)
                                 )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(14.dp)
+                                ) {
+                                    // Reply Action Button
+                                    Text(
+                                        text = "Reply",
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            fontWeight = FontWeight.SemiBold,
+                                            fontSize = 11.5.sp
+                                        ),
+                                        color = colors.pillSelectedFill,
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(4.dp))
+                                            .clickable {
+                                                replyingToComment = comment
+                                            }
+                                            .testTag("reply_button_${comment.commentId}")
+                                    )
+
+                                    if (comment.authorId == currentUserId) {
+                                        Text(
+                                            text = "Delete",
+                                            style = MaterialTheme.typography.labelSmall.copy(
+                                                fontSize = 11.5.sp
+                                            ),
+                                            color = colors.mutedText,
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(4.dp))
+                                                .clickable { onDeleteComment(comment.commentId) }
+                                                .testTag("delete_comment_${comment.commentId}")
+                                        )
+                                    }
+                                }
                             }
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .clickable { onToggleCommentLike(comment.commentId) }
+                                    .padding(4.dp)
                             ) {
                                 Icon(
-                                    imageVector = Icons.Outlined.FavoriteBorder,
+                                    imageVector = if (comment.likeCount > 0) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
                                     contentDescription = "Comment likes",
-                                    tint = colors.mutedText,
+                                    tint = if (comment.likeCount > 0) HeartCrimson else colors.mutedText,
                                     modifier = Modifier.size(14.dp)
                                 )
                                 Text(
@@ -650,17 +916,6 @@ fun PostDetailScreen(
                                     style = MaterialTheme.typography.labelSmall,
                                     color = colors.mutedText
                                 )
-                                if (comment.authorId == currentUserId) {
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Icon(
-                                        imageVector = Icons.Filled.DeleteOutline,
-                                        contentDescription = "Delete comment",
-                                        tint = colors.mutedText,
-                                        modifier = Modifier
-                                            .size(16.dp)
-                                            .clickable { onDeleteComment(comment.commentId) }
-                                    )
-                                }
                             }
                         }
                     }
@@ -668,7 +923,7 @@ fun PostDetailScreen(
             }
         }
 
-        // Bottom Anchored Pill Comment Composer (Matches Screen 3 of mockup)
+        // Bottom Anchored Pill Comment Composer (Matches Screen 3 of mockup with Reply Bar)
         Surface(
             color = colors.cardSurface,
             border = BorderStroke(0.6.dp, colors.border.copy(alpha = 0.6f)),
@@ -676,20 +931,61 @@ fun PostDetailScreen(
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
         ) {
-            Box(
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .navigationBarsPadding()
                     .padding(horizontal = 16.dp, vertical = 10.dp)
             ) {
+                // If replying to a comment, show active replying banner
+                if (replyingToComment != null) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(colors.subtleSurface)
+                            .padding(horizontal = 12.dp, vertical = 6.dp)
+                    ) {
+                        Text(
+                            text = "Replying to ",
+                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.5.sp),
+                            color = colors.mutedText
+                        )
+                        Text(
+                            text = "@${replyingToComment!!.authorNameSnapshot}",
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 11.5.sp
+                            ),
+                            color = colors.pillSelectedFill,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Icon(
+                            imageVector = Icons.Filled.Close,
+                            contentDescription = "Cancel reply",
+                            tint = colors.mutedText,
+                            modifier = Modifier
+                                .size(16.dp)
+                                .clip(CircleShape)
+                                .clickable { replyingToComment = null }
+                                .testTag("cancel_reply_banner_button")
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(6.dp))
+                }
+
                 ArtmuseumCommentComposer(
                     value = commentText,
                     onValueChange = { commentText = it },
                     isSending = isSubmittingComment,
                     onSend = {
                         val toSend = commentText
+                        val parentId = replyingToComment?.commentId
+                        val replyAuthor = replyingToComment?.authorNameSnapshot
                         commentText = ""
-                        onSendComment(toSend)
+                        replyingToComment = null
+                        onSendComment(toSend, parentId, replyAuthor)
                     }
                 )
             }

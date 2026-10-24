@@ -98,6 +98,7 @@ import com.example.ui.components.ArtmuseumThemeSwatch
 import com.example.ui.components.VerifiedMuseumBadge
 import com.example.ui.theme.ArtmuseumShapeTokens
 import com.example.ui.theme.LocalArtmuseumColors
+import com.example.ui.theme.LocalArtmuseumDimensions
 import com.example.ui.theme.PlayfairDisplayFontFamily
 import com.example.ui.theme.WarmPaper
 import com.example.ui.viewmodel.ArtmuseumViewModel
@@ -115,6 +116,8 @@ fun ProfileScreen(
     activeTheme: ArtmuseumThemePalette,
     followersList: List<UserFollow> = emptyList(),
     followingList: List<UserFollow> = emptyList(),
+    isGuest: Boolean = false,
+    onSignInWithGoogle: () -> Unit = {},
     onBackToHome: () -> Unit,
     onOpenPostDetail: (Post) -> Unit,
     onSaveProfileChanges: (
@@ -136,20 +139,21 @@ fun ProfileScreen(
     BackHandler(onBack = onBackToHome)
 
     val colors = LocalArtmuseumColors.current
+    val dimens = LocalArtmuseumDimensions.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
     val currentProfile = profile ?: UserProfile(
-        displayName = "Sophia",
-        age = 23,
-        gender = "Female",
-        bio = "Just a girl who finds beauty in meaningful conversations, art, nature and real connections. \uD83C\uDF3F",
-        photoURL = "preset:avatar_sophia",
-        bannerURL = "preset:profile_header",
-        postCount = 48,
-        followerCount = followersList.size.coerceAtLeast(2600),
-        followingCount = followingList.size.coerceAtLeast(312),
-        isVerified = true
+        displayName = if (isGuest) "Guest Explorer" else "Art Enthusiast",
+        age = 0,
+        gender = "Not specified",
+        bio = if (isGuest) "Exploring real-time public exhibits in guest mode." else "Art enthusiast and collector.",
+        photoURL = "",
+        bannerURL = "",
+        postCount = ownPosts.size,
+        followerCount = followersList.size,
+        followingCount = followingList.size,
+        isVerified = false
     )
 
     var selectedSegment by remember { mutableIntStateOf(0) } // 0 = Posts, 1 = Saved
@@ -216,10 +220,13 @@ fun ProfileScreen(
     }
 
     val displayedGridPosts = if (selectedSegment == 0) {
-        if (ownPosts.isNotEmpty()) ownPosts else allPublicPosts
+        ownPosts
     } else {
         savedExhibits
     }
+
+    val headerTotalHeight = if (dimens.isCompact) 220.dp else 260.dp
+    val bannerArtworkHeight = if (dimens.isCompact) 160.dp else 200.dp
 
     Column(
         modifier = Modifier
@@ -232,7 +239,7 @@ fun ProfileScreen(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(260.dp)
+                .height(headerTotalHeight)
         ) {
             // High-quality customizable botanical/artistic profile banner
             ArtmuseumArtworkImage(
@@ -241,7 +248,7 @@ fun ProfileScreen(
                 contentScale = ContentScale.Crop,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(200.dp)
+                    .height(bannerArtworkHeight)
             )
 
             // Edit Banner Camera Pill Button (Top Right of Banner)
@@ -370,8 +377,8 @@ fun ProfileScreen(
                 ArtmuseumAvatar(
                     photoURL = currentProfile.photoURL,
                     contentDescription = currentProfile.displayName,
-                    size = 102.dp,
-                    borderWidth = 3.5.dp,
+                    size = if (dimens.isCompact) 82.dp else 102.dp,
+                    borderWidth = if (dimens.isCompact) 2.5.dp else 3.5.dp,
                     borderColor = colors.cardSurface,
                     onClick = {
                         avatarPickerLauncher.launch(
@@ -469,22 +476,72 @@ fun ProfileScreen(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     ProfileStatItem(
-                        value = if (ownPosts.isNotEmpty()) ownPosts.size.toString() else currentProfile.postCount.coerceAtLeast(ownPosts.size).toString(),
+                        value = ownPosts.size.toString(),
                         label = "Posts"
                     )
                     ProfileStatItem(
-                        value = if (followersList.isNotEmpty()) followersList.size.toString() else formatStatCount(currentProfile.followerCount),
+                        value = followersList.size.toString(),
                         label = "Followers",
                         onClick = { showFollowListSheet = "followers" }
                     )
                     ProfileStatItem(
-                        value = if (followingList.isNotEmpty()) followingList.size.toString() else formatStatCount(currentProfile.followingCount),
+                        value = followingList.size.toString(),
                         label = "Following",
                         onClick = { showFollowListSheet = "following" }
                     )
                 }
 
                 Spacer(modifier = Modifier.height(20.dp))
+
+                if (isGuest) {
+                    Surface(
+                        shape = RoundedCornerShape(18.dp),
+                        color = colors.subtleSurface,
+                        border = BorderStroke(1.dp, colors.border),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 16.dp)
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.padding(16.dp)
+                        ) {
+                            Text(
+                                text = "Browsing in Guest Mode",
+                                style = MaterialTheme.typography.titleMedium.copy(
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = colors.inkPrimary
+                                )
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "Sign in with Google to backup your exhibits, personalize your name & avatar, and chat with creators.",
+                                style = MaterialTheme.typography.bodySmall.copy(
+                                    color = colors.mutedText,
+                                    textAlign = TextAlign.Center
+                                )
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                ArtmuseumPrimaryButton(
+                                    text = "Sign In",
+                                    onClick = onSignInWithGoogle,
+                                    modifier = Modifier.weight(1f),
+                                    testTag = "guest_profile_sign_in_button"
+                                )
+                                ArtmuseumSecondaryButton(
+                                    text = "Exit Guest",
+                                    onClick = onSignOut,
+                                    modifier = Modifier.weight(1f),
+                                    testTag = "guest_profile_exit_button"
+                                )
+                            }
+                        }
+                    }
+                }
 
                 // Pill Outline Button: [✏️ Edit Profile]
                 ArtmuseumSecondaryButton(
@@ -563,23 +620,7 @@ fun ProfileScreen(
                                     }
                                 }
                                 if (rowPosts.size == 1) {
-                                    // Fill second slot of row with fourth mockup painting if only 3 posts exist
-                                    Box(
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .height(126.dp)
-                                            .clip(RoundedCornerShape(16.dp))
-                                            .clickable {
-                                                rowPosts.firstOrNull()?.let(onOpenPostDetail)
-                                            }
-                                    ) {
-                                        ArtmuseumArtworkImage(
-                                            imageSource = "preset:golden_river",
-                                            contentDescription = "Golden river reflection",
-                                            modifier = Modifier.fillMaxSize(),
-                                            contentScale = ContentScale.Crop
-                                        )
-                                    }
+                                    Spacer(modifier = Modifier.weight(1f))
                                 }
                             }
                         }
@@ -1240,6 +1281,35 @@ fun ExploreScreen(
                     onMoreClick = { onOpenPostDetail(post) },
                     onAuthorClick = { onOpenPostDetail(post) }
                 )
+            }
+
+            if (matchingPosts.isEmpty() && matchingUsers.isEmpty()) {
+                item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 48.dp, start = 24.dp, end = 24.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            ArtmuseumOliveEmblem(size = 40.dp)
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text(
+                                text = if (searchQuery.isNotBlank()) "No exhibits matching \"$searchQuery\"" else "No exhibits published in this category yet",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = colors.inkPrimary,
+                                textAlign = TextAlign.Center
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "Try searching for a different keyword or explore all themes.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = colors.mutedText,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
+                }
             }
         }
     }

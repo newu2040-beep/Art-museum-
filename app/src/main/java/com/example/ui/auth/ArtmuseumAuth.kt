@@ -8,6 +8,7 @@ import android.os.Build
 import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -33,6 +34,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Email
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.PhotoLibrary
+import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -216,7 +218,8 @@ fun signOutArtmuseum(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ArtmuseumWelcomeAuthScreen(
-    onAuthSuccess: () -> Unit
+    onAuthSuccess: () -> Unit,
+    onContinueAsGuest: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -331,19 +334,6 @@ fun ArtmuseumWelcomeAuthScreen(
                     fontFamily = PlayfairDisplayFontFamily,
                     fontSize = 38.sp,
                     color = InkPrimary
-                ),
-                textAlign = TextAlign.Center
-            )
-
-            Spacer(modifier = Modifier.height(6.dp))
-
-            // Subtitle tagline
-            Text(
-                text = "Real People · Real Thoughts ·\nA Kinder World",
-                style = MaterialTheme.typography.bodySmall.copy(
-                    fontSize = 12.5.sp,
-                    lineHeight = 18.sp,
-                    color = MutedTaupe
                 ),
                 textAlign = TextAlign.Center
             )
@@ -504,6 +494,24 @@ fun ArtmuseumWelcomeAuthScreen(
                 testTag = "continue_with_email_button"
             )
 
+            Spacer(modifier = Modifier.height(11.dp))
+
+            // Tertiary Button: Explore as Guest
+            ArtmuseumSecondaryButton(
+                text = "Explore as Guest",
+                onClick = onContinueAsGuest,
+                leadingContent = {
+                    Icon(
+                        imageVector = Icons.Outlined.Visibility,
+                        contentDescription = null,
+                        tint = InkPrimary,
+                        modifier = Modifier.size(19.dp)
+                    )
+                },
+                modifier = Modifier.fillMaxWidth(),
+                testTag = "continue_as_guest_button"
+            )
+
             Spacer(modifier = Modifier.height(16.dp))
 
             // Footer: Already have an account? Sign In
@@ -527,6 +535,41 @@ fun ArtmuseumWelcomeAuthScreen(
                     text = "Sign In",
                     style = MaterialTheme.typography.bodySmall.copy(
                         fontSize = 12.5.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = InkPrimary
+                    )
+                )
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // Developer Credit
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 4.dp)
+                    .testTag("developer_credit_rahul_shah")
+            ) {
+                Text(
+                    text = "Made with ",
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontSize = 12.sp,
+                        color = MutedTaupe
+                    )
+                )
+                Text(
+                    text = "❤",
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontSize = 12.sp,
+                        color = Color(0xFFC04B40)
+                    )
+                )
+                Text(
+                    text = " by Rahul Shah",
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontSize = 12.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = InkPrimary
                     )
@@ -896,6 +939,71 @@ fun GoogleBadgeIcon() {
                     sweepAngle = 80f,
                     useCenter = false,
                     style = stroke
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun GuestSignInPromptDialog(
+    onDismiss: () -> Unit,
+    onSignInWithGoogle: () -> Unit
+) {
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            shape = RoundedCornerShape(24.dp),
+            color = MuseumCream,
+            border = BorderStroke(1.dp, MuseumBorder),
+            shadowElevation = 10.dp,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(24.dp)
+            ) {
+                ArtmuseumOliveEmblem(size = 42.dp)
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = "Sign in to Artmuseum",
+                    style = MaterialTheme.typography.titleLarge.copy(
+                        fontFamily = PlayfairDisplayFontFamily,
+                        fontWeight = FontWeight.Bold,
+                        color = InkPrimary
+                    ),
+                    textAlign = TextAlign.Center
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "You are currently browsing as a Guest. Sign in with Google to create exhibits, share thoughts, like, bookmark, and chat with creators.",
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        color = InkPrimary.copy(alpha = 0.82f),
+                        fontSize = 13.5.sp,
+                        lineHeight = 19.sp
+                    ),
+                    textAlign = TextAlign.Center
+                )
+                Spacer(modifier = Modifier.height(20.dp))
+                ArtmuseumPrimaryButton(
+                    text = "Sign in with Google",
+                    onClick = {
+                        onDismiss()
+                        onSignInWithGoogle()
+                    },
+                    leadingContent = { GoogleBadgeIcon() },
+                    modifier = Modifier.fillMaxWidth(),
+                    testTag = "dialog_google_sign_in_button"
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+                ArtmuseumSecondaryButton(
+                    text = "Continue Browsing",
+                    onClick = onDismiss,
+                    modifier = Modifier.fillMaxWidth(),
+                    testTag = "dialog_dismiss_button"
                 )
             }
         }

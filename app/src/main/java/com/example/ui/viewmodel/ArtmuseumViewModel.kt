@@ -10,11 +10,16 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.model.ActivityNotification
 import com.example.data.model.ArtmuseumThemePalette
+import com.example.data.model.DirectChatConversation
+import com.example.data.model.DirectChatMessage
 import com.example.data.model.Post
 import com.example.data.model.PostComment
 import com.example.data.model.UserBlock
 import com.example.data.model.UserFollow
 import com.example.data.model.UserProfile
+import com.example.data.model.GUEST_PROFILE
+import com.example.data.model.GUEST_SAMPLE_COMMENTS
+import com.example.data.model.GUEST_SAMPLE_POSTS
 import com.example.data.repository.ArtmuseumRepository
 import java.io.ByteArrayOutputStream
 import kotlinx.coroutines.Dispatchers
@@ -38,8 +43,9 @@ sealed interface UiState<out T> {
 
 class ArtmuseumViewModel(
     private val repository: ArtmuseumRepository,
-    private val currentUserId: String,
-    private val initialDisplayName: String = "Sophia"
+    val currentUserId: String,
+    private val initialDisplayName: String = "Sophia",
+    val isGuest: Boolean = false
 ) : ViewModel() {
 
     private val _selectedFilter = MutableStateFlow("For You")
@@ -54,41 +60,78 @@ class ArtmuseumViewModel(
     private val _likedPostIds = MutableStateFlow<Set<String>>(emptySet())
     val likedPostIds: StateFlow<Set<String>> = _likedPostIds.asStateFlow()
 
-    val followingUserIds: StateFlow<Set<String>> = repository.observeFollowingUserIds(currentUserId)
-        .catch { e ->
-            Log.w(TAG, "Error observing following user IDs", e)
-            emit(emptySet())
-        }
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000L),
-            initialValue = emptySet()
-        )
+    // In-memory guest session data stores (pure real-time data)
+    private val _guestPosts = MutableStateFlow<List<Post>>(emptyList())
+    private val _guestSavedPostIds = MutableStateFlow<Set<String>>(emptySet())
+    private val _guestComments = MutableStateFlow<List<PostComment>>(emptyList())
 
-    val followersList: StateFlow<List<UserFollow>> = repository.observeFollowers(currentUserId)
-        .catch { e ->
-            Log.w(TAG, "Error observing followers", e)
-            emit(emptyList())
-        }
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000L),
-            initialValue = emptyList()
-        )
+    val followingUserIds: StateFlow<Set<String>> = if (isGuest) {
+        MutableStateFlow(emptySet())
+    } else {
+        repository.observeFollowingUserIds(currentUserId)
+            .catch { e ->
+                Log.w(TAG, "Error observing following user IDs", e)
+                emit(emptySet())
+            }
+            .stateIn(
+                scope = viewModelScope,
+                started = SharingStarted.WhileSubscribed(5000L),
+                initialValue = emptySet()
+            )
+    }
 
-    val followingList: StateFlow<List<UserFollow>> = repository.observeFollowing(currentUserId)
-        .catch { e ->
-            Log.w(TAG, "Error observing following", e)
-            emit(emptyList())
-        }
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000L),
-            initialValue = emptyList()
-        )
+    val followersList: StateFlow<List<UserFollow>> = if (isGuest) {
+        MutableStateFlow(emptyList())
+    } else {
+        repository.observeFollowers(currentUserId)
+            .catch { e ->
+                Log.w(TAG, "Error observing followers", e)
+                emit(emptyList())
+            }
+            .stateIn(
+                scope = viewModelScope,
+                started = SharingStarted.WhileSubscribed(5000L),
+                initialValue = emptyList()
+            )
+    }
+
+    val followingList: StateFlow<List<UserFollow>> = if (isGuest) {
+        MutableStateFlow(emptyList())
+    } else {
+        repository.observeFollowing(currentUserId)
+            .catch { e ->
+                Log.w(TAG, "Error observing following", e)
+                emit(emptyList())
+            }
+            .stateIn(
+                scope = viewModelScope,
+                started = SharingStarted.WhileSubscribed(5000L),
+                initialValue = emptyList()
+            )
+    }
 
     private val _selectedPostComments = MutableStateFlow<List<PostComment>>(emptyList())
     val selectedPostComments: StateFlow<List<PostComment>> = _selectedPostComments.asStateFlow()
+
+    val conversations: StateFlow<List<DirectChatConversation>> = if (isGuest) {
+        MutableStateFlow(emptyList())
+    } else {
+        repository.observeConversations(currentUserId)
+            .catch { emit(emptyList()) }
+            .stateIn(
+                scope = viewModelScope,
+                started = SharingStarted.WhileSubscribed(5000L),
+                initialValue = emptyList()
+            )
+    }
+
+    private val _activeChatId = MutableStateFlow<String?>(null)
+    val activeChatId: StateFlow<String?> = _activeChatId.asStateFlow()
+
+    private val _activeChatMessages = MutableStateFlow<List<DirectChatMessage>>(emptyList())
+    val activeChatMessages: StateFlow<List<DirectChatMessage>> = _activeChatMessages.asStateFlow()
+
+    private var activeChatJob: Job? = null
 
     private val _statusBanner = MutableStateFlow<String?>(null)
     val statusBanner: StateFlow<String?> = _statusBanner.asStateFlow()
@@ -98,80 +141,110 @@ class ArtmuseumViewModel(
 
     private var commentsJob: Job? = null
 
-    val userProfileState: StateFlow<UiState<UserProfile>> = repository.observeUserProfile(currentUserId)
-        .map<UserProfile?, UiState<UserProfile>> { profile ->
-            if (profile != null) {
-                _activeTheme.value = ArtmuseumThemePalette.fromName(profile.themePreference)
-                UiState.Success(profile)
-            } else {
-                UiState.Loading
+    val userProfileState: StateFlow<UiState<UserProfile>> = if (isGuest) {
+        MutableStateFlow(UiState.Success(GUEST_PROFILE))
+    } else {
+        repository.observeUserProfile(currentUserId)
+            .map<UserProfile?, UiState<UserProfile>> { profile ->
+                if (profile != null) {
+                    _activeTheme.value = ArtmuseumThemePalette.fromName(profile.themePreference)
+                    UiState.Success(profile)
+                } else {
+                    UiState.Loading
+                }
             }
-        }
-        .catch { e ->
-            Log.w(TAG, "Error observing user profile", e)
-            emit(UiState.Error(e.localizedMessage ?: "Failed to load profile"))
-        }
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000L),
-            initialValue = UiState.Loading
-        )
+            .catch { e ->
+                Log.w(TAG, "Error observing user profile", e)
+                emit(UiState.Error(e.localizedMessage ?: "Failed to load profile"))
+            }
+            .stateIn(
+                scope = viewModelScope,
+                started = SharingStarted.WhileSubscribed(5000L),
+                initialValue = UiState.Loading
+            )
+    }
 
-    val savedPostIds: StateFlow<Set<String>> = repository.observeSavedPostIds(currentUserId)
-        .catch { e ->
-            Log.w(TAG, "Error observing saved posts", e)
-            emit(emptySet())
-        }
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000L),
-            initialValue = emptySet()
-        )
+    val savedPostIds: StateFlow<Set<String>> = if (isGuest) {
+        _guestSavedPostIds.asStateFlow()
+    } else {
+        repository.observeSavedPostIds(currentUserId)
+            .catch { e ->
+                Log.w(TAG, "Error observing saved posts", e)
+                emit(emptySet())
+            }
+            .stateIn(
+                scope = viewModelScope,
+                started = SharingStarted.WhileSubscribed(5000L),
+                initialValue = emptySet()
+            )
+    }
 
-    val blockedUsers: StateFlow<List<UserBlock>> = repository.observeBlockedUsers(currentUserId)
-        .catch { e ->
-            Log.w(TAG, "Error observing blocked users", e)
-            emit(emptyList())
-        }
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000L),
-            initialValue = emptyList()
-        )
+    val blockedUsers: StateFlow<List<UserBlock>> = if (isGuest) {
+        MutableStateFlow(emptyList())
+    } else {
+        repository.observeBlockedUsers(currentUserId)
+            .catch { e ->
+                Log.w(TAG, "Error observing blocked users", e)
+                emit(emptyList())
+            }
+            .stateIn(
+                scope = viewModelScope,
+                started = SharingStarted.WhileSubscribed(5000L),
+                initialValue = emptyList()
+            )
+    }
 
-    val notifications: StateFlow<List<ActivityNotification>> = repository.observeNotifications(currentUserId)
-        .catch { e ->
-            Log.w(TAG, "Error observing notifications", e)
-            emit(emptyList())
-        }
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000L),
-            initialValue = emptyList()
-        )
+    val notifications: StateFlow<List<ActivityNotification>> = if (isGuest) {
+        MutableStateFlow(emptyList())
+    } else {
+        repository.observeNotifications(currentUserId)
+            .catch { e ->
+                Log.w(TAG, "Error observing notifications", e)
+                emit(emptyList())
+            }
+            .stateIn(
+                scope = viewModelScope,
+                started = SharingStarted.WhileSubscribed(5000L),
+                initialValue = emptyList()
+            )
+    }
 
-    val publicUsers: StateFlow<List<UserProfile>> = repository.observePublicUsers()
-        .catch { e ->
-            Log.w(TAG, "Error observing public users", e)
-            emit(emptyList())
-        }
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000L),
-            initialValue = emptyList()
-        )
+    val publicUsers: StateFlow<List<UserProfile>> = if (isGuest) {
+        MutableStateFlow(listOf(GUEST_PROFILE))
+    } else {
+        repository.observePublicUsers()
+            .catch { e ->
+                Log.w(TAG, "Error observing public users", e)
+                emit(emptyList())
+            }
+            .stateIn(
+                scope = viewModelScope,
+                started = SharingStarted.WhileSubscribed(5000L),
+                initialValue = emptyList()
+            )
+    }
 
-    private val rawPublicPosts: StateFlow<UiState<List<Post>>> = repository.observePublicPosts()
-        .map<List<Post>, UiState<List<Post>>> { posts -> UiState.Success(posts) }
-        .catch { e ->
-            Log.w(TAG, "Error observing public posts", e)
-            emit(UiState.Error(e.localizedMessage ?: "Failed to load museum feed"))
-        }
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000L),
-            initialValue = UiState.Loading
-        )
+    private val rawPublicPosts: StateFlow<UiState<List<Post>>> = if (isGuest) {
+        _guestPosts
+            .map<List<Post>, UiState<List<Post>>> { posts -> UiState.Success(posts) }
+            .stateIn(
+                scope = viewModelScope,
+                started = SharingStarted.WhileSubscribed(5000L),
+                initialValue = UiState.Success(emptyList())
+            )
+    } else {
+        repository.observePublicPosts()
+            .map<List<Post>, UiState<List<Post>>> { posts -> UiState.Success(posts) }
+            .catch { e ->
+                Log.w(TAG, "Error observing public posts", e)
+                emit(UiState.Error(e.localizedMessage ?: "Failed to load museum feed"))
+            }
+            .stateIn(
+                scope = viewModelScope,
+                started = SharingStarted.WhileSubscribed(5000L),
+                initialValue = UiState.Loading
+            )
+    }
 
     val feedState: StateFlow<UiState<List<Post>>> = combine(
         rawPublicPosts,
@@ -201,26 +274,34 @@ class ArtmuseumViewModel(
         initialValue = UiState.Loading
     )
 
-    val userOwnPosts: StateFlow<List<Post>> = repository.observeUserPosts(currentUserId)
-        .catch { e ->
-            Log.w(TAG, "Error observing user own posts", e)
-            emit(emptyList())
-        }
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000L),
-            initialValue = emptyList()
-        )
+    val userOwnPosts: StateFlow<List<Post>> = if (isGuest) {
+        MutableStateFlow(emptyList())
+    } else {
+        repository.observeUserPosts(currentUserId)
+            .catch { e ->
+                Log.w(TAG, "Error observing user own posts", e)
+                emit(emptyList())
+            }
+            .stateIn(
+                scope = viewModelScope,
+                started = SharingStarted.WhileSubscribed(5000L),
+                initialValue = emptyList()
+            )
+    }
 
     init {
         bootstrapSession()
     }
 
     private fun bootstrapSession() {
+        if (isGuest) {
+            _activeTheme.value = ArtmuseumThemePalette.CREAM
+            return
+        }
         viewModelScope.launch {
             val result = repository.createOrInitializeProfile(
-                displayName = initialDisplayName.ifBlank { "Sophia" },
-                bio = "Just a girl who finds beauty in meaningful conversations, art, nature and real connections. \uD83C\uDF3F",
+                displayName = initialDisplayName.ifBlank { "Art Enthusiast" },
+                bio = "",
                 age = 23,
                 gender = "Female",
                 photoURL = "preset:avatar_sophia",
@@ -228,7 +309,6 @@ class ArtmuseumViewModel(
             )
             result.onSuccess { profile ->
                 _activeTheme.value = ArtmuseumThemePalette.fromName(profile.themePreference)
-                repository.ensureInitialExhibitsIfEmpty(profile)
             }
         }
     }
@@ -250,6 +330,10 @@ class ArtmuseumViewModel(
     }
 
     fun observeCommentsForPost(postId: String) {
+        if (isGuest) {
+            _selectedPostComments.value = _guestComments.value.filter { it.postId == postId }
+            return
+        }
         commentsJob?.cancel()
         commentsJob = viewModelScope.launch {
             val liked = repository.isPostLiked(postId, currentUserId)
@@ -265,6 +349,16 @@ class ArtmuseumViewModel(
     }
 
     fun toggleLike(post: Post) {
+        if (isGuest) {
+            val wasLiked = post.postId in _likedPostIds.value
+            _likedPostIds.value = if (wasLiked) _likedPostIds.value - post.postId else _likedPostIds.value + post.postId
+            _guestPosts.value = _guestPosts.value.map { p ->
+                if (p.postId == post.postId) {
+                    p.copy(likeCount = if (wasLiked) maxOf(0, p.likeCount - 1) else p.likeCount + 1)
+                } else p
+            }
+            return
+        }
         val currentProfile = (userProfileState.value as? UiState.Success)?.data ?: UserProfile(
             uid = currentUserId,
             displayName = initialDisplayName.ifBlank { "Sophia" }
@@ -297,6 +391,12 @@ class ArtmuseumViewModel(
     }
 
     fun toggleSave(postId: String) {
+        if (isGuest) {
+            val isSaved = postId in _guestSavedPostIds.value
+            _guestSavedPostIds.value = if (isSaved) _guestSavedPostIds.value - postId else _guestSavedPostIds.value + postId
+            _statusBanner.value = if (isSaved) "Removed from Saved" else "Saved to your collection"
+            return
+        }
         viewModelScope.launch {
             val result = repository.toggleSavePost(postId)
             result.onSuccess { saved ->
@@ -315,6 +415,32 @@ class ArtmuseumViewModel(
         themePalette: ArtmuseumThemePalette,
         onSuccess: () -> Unit
     ) {
+        if (isGuest) {
+            val newId = "guest_post_${System.currentTimeMillis()}"
+            val newPost = Post(
+                documentId = newId,
+                postId = newId,
+                authorId = "guest_visitor",
+                authorNameSnapshot = "Guest Explorer",
+                authorPhotoSnapshot = "preset:avatar_sophia",
+                authorAgeSnapshot = 22,
+                authorGenderSnapshot = "Visitor",
+                text = text.ifBlank { imageCaption.ifBlank { "Quiet reflections from today's gallery." } },
+                imageURL = imageURL,
+                imageCaption = imageCaption,
+                topics = topics,
+                themeName = themePalette.label,
+                likeCount = 0,
+                commentCount = 0,
+                visibility = "public",
+                status = "active"
+            )
+            _guestPosts.value = listOf(newPost) + _guestPosts.value
+            _activeTheme.value = themePalette
+            _statusBanner.value = "Exhibit published in Guest Mode"
+            onSuccess()
+            return
+        }
         val profile = (userProfileState.value as? UiState.Success)?.data ?: UserProfile(
             uid = currentUserId,
             displayName = initialDisplayName.ifBlank { "Sophia" },
@@ -345,6 +471,12 @@ class ArtmuseumViewModel(
     }
 
     fun deletePost(postId: String, onDeleted: () -> Unit = {}) {
+        if (isGuest) {
+            _guestPosts.value = _guestPosts.value.filter { it.postId != postId }
+            _statusBanner.value = "Exhibit deleted"
+            onDeleted()
+            return
+        }
         viewModelScope.launch {
             repository.deletePost(postId).onSuccess {
                 _statusBanner.value = "Exhibit deleted"
@@ -355,14 +487,48 @@ class ArtmuseumViewModel(
         }
     }
 
-    fun sendComment(post: Post, text: String, onComplete: () -> Unit) {
+    fun sendComment(
+        post: Post,
+        text: String,
+        parentCommentId: String? = null,
+        replyToAuthor: String? = null,
+        onComplete: () -> Unit
+    ) {
+        if (isGuest) {
+            val newComment = PostComment(
+                commentId = "guest_cmt_${System.currentTimeMillis()}",
+                postId = post.postId,
+                authorId = "guest_visitor",
+                authorNameSnapshot = "Guest Explorer",
+                authorPhotoSnapshot = "preset:avatar_sophia",
+                text = text,
+                parentCommentId = parentCommentId,
+                replyToAuthor = replyToAuthor,
+                likeCount = 0,
+                status = "active"
+            )
+            _guestComments.value = _guestComments.value + newComment
+            _selectedPostComments.value = _guestComments.value.filter { it.postId == post.postId }
+            _guestPosts.value = _guestPosts.value.map { p ->
+                if (p.postId == post.postId) p.copy(commentCount = p.commentCount + 1) else p
+            }
+            _statusBanner.value = "Comment shared in Guest Mode"
+            onComplete()
+            return
+        }
         val profile = (userProfileState.value as? UiState.Success)?.data ?: UserProfile(
             uid = currentUserId,
             displayName = initialDisplayName.ifBlank { "Sophia" }
         )
         _isSubmitting.value = true
         viewModelScope.launch {
-            val res = repository.addComment(post, profile, text)
+            val res = repository.addComment(
+                post = post,
+                authorProfile = profile,
+                text = text,
+                parentCommentId = parentCommentId,
+                replyToAuthor = replyToAuthor
+            )
             _isSubmitting.value = false
             res.onSuccess {
                 onComplete()
@@ -372,9 +538,89 @@ class ArtmuseumViewModel(
         }
     }
 
+    fun toggleCommentLike(postId: String, commentId: String) {
+        if (isGuest) {
+            _guestComments.value = _guestComments.value.map { c ->
+                if (c.commentId == commentId) c.copy(likeCount = c.likeCount + 1) else c
+            }
+            _selectedPostComments.value = _guestComments.value.filter { it.postId == postId }
+            return
+        }
+        viewModelScope.launch {
+            repository.toggleCommentLike(postId, commentId)
+        }
+    }
+
     fun deleteComment(postId: String, commentId: String) {
         viewModelScope.launch {
             repository.deleteComment(postId, commentId)
+        }
+    }
+
+    fun openChat(chatId: String) {
+        _activeChatId.value = chatId
+        repository.markChatRead(chatId)
+        activeChatJob?.cancel()
+        activeChatJob = viewModelScope.launch {
+            repository.observeMessages(chatId).collect { msgs ->
+                _activeChatMessages.value = msgs
+            }
+        }
+    }
+
+    fun sendDirectMessage(
+        peerUid: String,
+        peerName: String,
+        peerPhoto: String,
+        text: String,
+        onSent: () -> Unit = {}
+    ) {
+        val profile = (userProfileState.value as? UiState.Success)?.data ?: UserProfile(
+            uid = currentUserId,
+            displayName = initialDisplayName.ifBlank { "Sophia" }
+        )
+        viewModelScope.launch {
+            repository.sendDirectMessage(
+                senderProfile = profile,
+                peerUid = peerUid,
+                peerName = peerName,
+                peerPhoto = peerPhoto,
+                text = text
+            ).onSuccess {
+                onSent()
+                // If chatting with a community member, generate a thoughtful automatic reply after 1.4s
+                if (peerUid.contains("arjun", ignoreCase = true) || peerName.equals("Arjun", ignoreCase = true)) {
+                    kotlinx.coroutines.delay(1400L)
+                    val replyTexts = listOf(
+                        "That is such a profound reflection. Art connects us in quiet, unexpected ways. ✨",
+                        "I was just looking at that piece yesterday! The brushwork feels so intimate.",
+                        "Thank you for sharing your thoughts—it really brightened my afternoon gallery walk."
+                    )
+                    repository.sendDirectMessage(
+                        senderProfile = UserProfile(uid = peerUid, displayName = peerName, photoURL = peerPhoto),
+                        peerUid = currentUserId,
+                        peerName = profile.displayName,
+                        peerPhoto = profile.photoURL,
+                        text = replyTexts.random()
+                    )
+                } else if (peerUid.contains("elena", ignoreCase = true) || peerName.equals("Elena Vance", ignoreCase = true)) {
+                    kotlinx.coroutines.delay(1400L)
+                    val replyTexts = listOf(
+                        "I love how classical paintings capture the tenderness of simple moments.",
+                        "Wonderful to connect with you here! What style of art do you love most?",
+                        "Your appreciation of art is inspiring. Keep creating and reflecting."
+                    )
+                    repository.sendDirectMessage(
+                        senderProfile = UserProfile(uid = peerUid, displayName = peerName, photoURL = peerPhoto),
+                        peerUid = currentUserId,
+                        peerName = profile.displayName,
+                        peerPhoto = profile.photoURL,
+                        text = replyTexts.random()
+                    )
+                }
+            }.onFailure { err ->
+                _statusBanner.value = err.localizedMessage ?: "Failed to send message"
+            }
         }
     }
 

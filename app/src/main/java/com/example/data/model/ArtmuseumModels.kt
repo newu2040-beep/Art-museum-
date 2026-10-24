@@ -13,21 +13,31 @@ enum class ArtmuseumThemePalette(
     val cardSurfaceHex: Long,
     val accentHex: Long,
     val chipFillHex: Long,
-    val isDark: Boolean = false
+    val isDark: Boolean = false,
+    val subtleSurfaceHex: Long = 0xFFEFE8D8,
+    val borderHex: Long = 0xFFE2D9C8,
+    val navActivePillHex: Long = 0xFF4A3B32
 ) {
-    CREAM("Cream", 0xFFF7F2E8, 0xFFFFFDF8, 0xFF5D634E, 0xFF5D634E),
-    SAGE("Sage", 0xFFEEF1EA, 0xFFF9FAF7, 0xFF56634D, 0xFF67755D),
-    BLUE("Blue", 0xFFEDF2F5, 0xFFF8FBFD, 0xFF5C7B8E, 0xFF7596AA),
-    ROSE("Rose", 0xFFF7EFEF, 0xFFFFFAFA, 0xFFA86458, 0xFFC98779),
-    LAVENDER("Lavender", 0xFFF2EFF6, 0xFFFCFAFF, 0xFF7A6D94, 0xFF9688B0),
-    TERRACOTTA("Terracotta", 0xFFF6EDE8, 0xFFFFF9F5, 0xFFA1583E, 0xFFB86E52),
-    SUNSET("Sunset", 0xFFFAF0E6, 0xFFFFFBF7, 0xFFC26D43, 0xFFD88055),
-    OLIVE("Olive Grove", 0xFFEFF1E8, 0xFFF9FAF5, 0xFF4A563E, 0xFF5B694D),
-    MIDNIGHT("Midnight", 0xFF1F2326, 0xFF292E32, 0xFFA5B599, 0xFF4B5645, isDark = true),
-    OBSIDIAN("Obsidian Gold", 0xFF121214, 0xFF1C1C20, 0xFFD4AF37, 0xFF3D3A2B, isDark = true),
-    DARK_EMERALD("Dark Emerald", 0xFF111E18, 0xFF1A2B23, 0xFF7CA982, 0xFF2D4738, isDark = true),
-    DARK_AMETHYST("Dark Amethyst", 0xFF181421, 0xFF231E30, 0xFFAD96DC, 0xFF3C3152, isDark = true),
-    DARK_CHARCOAL("Dark Charcoal", 0xFF1A1A1D, 0xFF252529, 0xFFE07A5F, 0xFF423B38, isDark = true);
+    CREAM("Cream", 0xFFF7F2E8, 0xFFFFFDF8, 0xFF5D634E, 0xFF5D634E, false, 0xFFEFE8D8, 0xFFE2D9C8, 0xFF4A3B32),
+    SAGE("Sage", 0xFFEEF1EA, 0xFFF9FAF7, 0xFF56634D, 0xFF67755D, false, 0xFFE2E7DC, 0xFFD2D9CA, 0xFF526049),
+    BLUE("Blue", 0xFFEDF2F5, 0xFFF8FBFD, 0xFF5C7B8E, 0xFF7596AA, false, 0xFFE0E9EE, 0xFFCCDCE5, 0xFF4D6F83),
+    ROSE("Rose", 0xFFF7EFEF, 0xFFFFFAFA, 0xFFA86458, 0xFFC98779, false, 0xFFF2E2E2, 0xFFE5CECE, 0xFF965246),
+    LAVENDER("Lavender", 0xFFF2EFF6, 0xFFFCFAFF, 0xFF7A6D94, 0xFF9688B0, false, 0xFFE8E2F0, 0xFFD6CFE2, 0xFF6A5D84),
+    TERRACOTTA("Terracotta", 0xFFF6EDE8, 0xFFFFF9F5, 0xFFA1583E, 0xFFB86E52, false, 0xFFEEDDCE, 0xFFE2CBBA, 0xFF8F472D),
+    SUNSET("Sunset", 0xFFFAF0E6, 0xFFFFFBF7, 0xFFC26D43, 0xFFD88055, false, 0xFFF3E2D0, 0xFFE6D0BA, 0xFFB05B32),
+    OLIVE("Olive Grove", 0xFFEFF1E8, 0xFFF9FAF5, 0xFF4A563E, 0xFF5B694D, false, 0xFFE1E5D8, 0xFFD1D8C6, 0xFF434E37),
+    STRAWBERRY_MILK("Strawberry Milk", 0xFFFDF0F4, 0xFFFFF8FA, 0xFFE0527F, 0xFFE96590, false, 0xFFFAE0E8, 0xFFF5CCD8, 0xFFD64473),
+    PEACH_MOCHI("Peach Mochi", 0xFFFFF3ED, 0xFFFFF9F6, 0xFFF27A59, 0xFFF68D70, false, 0xFFFDE4D8, 0xFFF7D1BF, 0xFFE26A49),
+    MATCHA_LATTE("Matcha Latte", 0xFFF0F5EC, 0xFFF9FCF7, 0xFF5F854D, 0xFF739A60, false, 0xFFE3EDE0, 0xFFD3E0CE, 0xFF537841),
+    BUTTER_HONEY("Butter & Honey", 0xFFFEF9E8, 0xFFFFFDF5, 0xFFD99018, 0xFFE6A32E, false, 0xFFFCF0CD, 0xFFF4E2B0, 0xFFC48012),
+    COTTON_CANDY("Cotton Candy", 0xFFF3F1FD, 0xFFFAF9FF, 0xFF7D67C7, 0xFF927CD8, false, 0xFFE7E3FA, 0xFFD7D1F4, 0xFF6F59B9),
+    MINT_MACARON("Mint Macaron", 0xFFECF7F3, 0xFFF7FCFA, 0xFF3D9682, 0xFF4FA894, false, 0xFFDCF0E8, 0xFFC9E4D9, 0xFF328773),
+    VANILLA_CHAI("Vanilla Chai", 0xFFF7F2EC, 0xFFFDFBFA, 0xFFA66E44, 0xFFB98055, false, 0xFFEFE4D8, 0xFFE0D3C4, 0xFF955F35),
+    MIDNIGHT("Midnight", 0xFF181B1D, 0xFF22272B, 0xFFA5B599, 0xFF4B5645, true, 0xFF2C3237, 0xFF384046, 0xFF3A444C),
+    OBSIDIAN("Obsidian Gold", 0xFF101012, 0xFF19191D, 0xFFD4AF37, 0xFF5C4F2A, true, 0xFF232328, 0xFF33333A, 0xFF363224),
+    DARK_EMERALD("Dark Emerald", 0xFF0E1A14, 0xFF16251E, 0xFF7CA982, 0xFF2D4738, true, 0xFF1F3229, 0xFF2D4438, 0xFF263D31),
+    DARK_AMETHYST("Dark Amethyst", 0xFF14101C, 0xFF1E1929, 0xFFAD96DC, 0xFF3C3152, true, 0xFF282236, 0xFF372F4A, 0xFF332945),
+    DARK_CHARCOAL("Dark Charcoal", 0xFF151517, 0xFF202024, 0xFFE07A5F, 0xFF483A36, true, 0xFF2B2B30, 0xFF3A3A42, 0xFF3D322F);
 
     companion object {
         fun fromName(name: String?): ArtmuseumThemePalette {
@@ -38,21 +48,35 @@ enum class ArtmuseumThemePalette(
 
 val ARTMUSEUM_FEED_FILTERS = listOf(
     "For You",
+    "Art",
     "Life",
     "Love",
     "Courage",
     "Growth",
     "Peace",
-    "Art"
+    "Philosophy",
+    "Poetry",
+    "Solitude",
+    "Nature",
+    "Classical",
+    "Modern",
+    "Reflections"
 )
 
 val ARTMUSEUM_TOPICS = listOf(
+    "Art",
     "Life",
     "Love",
     "Courage",
     "Growth",
     "Peace",
-    "Art"
+    "Philosophy",
+    "Poetry",
+    "Solitude",
+    "Nature",
+    "Classical",
+    "Modern",
+    "Reflections"
 )
 
 data class PresetArtwork(
@@ -283,6 +307,8 @@ data class PostComment(
     val text: String = "",
     val likeCount: Int = 0,
     val status: String = "active",
+    val parentCommentId: String? = null,
+    val replyToAuthor: String? = null,
     @ServerTimestamp val createdAt: Timestamp? = null,
     @ServerTimestamp val updatedAt: Timestamp? = null
 ) {
@@ -299,6 +325,8 @@ data class PostComment(
                 text = doc.getString("text") ?: "",
                 likeCount = (doc.getLong("likeCount") ?: 0L).toInt(),
                 status = doc.getString("status") ?: "active",
+                parentCommentId = doc.getString("parentCommentId"),
+                replyToAuthor = doc.getString("replyToAuthor"),
                 createdAt = doc.getTimestamp("createdAt", DocumentSnapshot.ServerTimestampBehavior.ESTIMATE),
                 updatedAt = doc.getTimestamp("updatedAt", DocumentSnapshot.ServerTimestampBehavior.ESTIMATE)
             )
@@ -365,3 +393,49 @@ data class UserBlock(
         }
     }
 }
+
+@IgnoreExtraProperties
+data class DirectChatConversation(
+    val chatId: String = "",
+    val peerUid: String = "",
+    val peerName: String = "",
+    val peerPhotoURL: String = "preset:avatar_sophia",
+    val lastMessage: String = "",
+    val lastMessageTimeFormatted: String = "Just now",
+    val unreadCount: Int = 0,
+    val lastMessageTimestamp: Long = System.currentTimeMillis()
+)
+
+@IgnoreExtraProperties
+data class DirectChatMessage(
+    val messageId: String = "",
+    val chatId: String = "",
+    val senderUid: String = "",
+    val receiverUid: String = "",
+    val text: String = "",
+    val timestamp: Long = System.currentTimeMillis(),
+    val isFromMe: Boolean = false,
+    val formattedTime: String = "12:00 PM"
+)
+
+val GUEST_PROFILE = UserProfile(
+    documentId = "guest_visitor",
+    uid = "guest_visitor",
+    displayName = "Guest Explorer",
+    bio = "Exploring Artmuseum in Guest Mode.",
+    age = 22,
+    gender = "Visitor",
+    photoURL = "preset:avatar_sophia",
+    bannerURL = "preset:profile_header",
+    themePreference = "Cream",
+    postCount = 0,
+    followerCount = 0,
+    followingCount = 0,
+    isVerified = false
+)
+
+val GUEST_SAMPLE_POSTS: List<Post> = emptyList()
+
+val GUEST_SAMPLE_COMMENTS: List<PostComment> = emptyList()
+
+

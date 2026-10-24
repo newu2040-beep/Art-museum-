@@ -47,20 +47,26 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.example.data.model.ArtmuseumThemePalette
 import com.example.data.model.Post
 import com.example.data.model.UserFollow
+import android.view.Display
 import com.example.data.repository.ArtmuseumRepository
 import com.example.ui.auth.ArtmuseumIntroPermissionsDialog
 import com.example.ui.auth.ArtmuseumWelcomeAuthScreen
+import com.example.ui.auth.GuestSignInPromptDialog
 import com.example.ui.auth.authStateFlow
+import com.example.ui.auth.onGoogleSignInClicked
 import com.example.ui.auth.signOutArtmuseum
 import com.example.ui.components.ArtmuseumBottomNavigation
 import com.example.ui.components.ArtmuseumTab
+import com.example.ui.screens.ChatConversationScreen
 import com.example.ui.screens.CreatePostScreen
+import com.example.ui.screens.DirectMessagesListScreen
 import com.example.ui.screens.ExploreScreen
 import com.example.ui.screens.HomeFeedScreen
 import com.example.ui.screens.NotificationsBottomSheet
 import com.example.ui.screens.PostDetailScreen
 import com.example.ui.screens.ProfileScreen
 import com.example.ui.screens.SavedPostsScreen
+import com.example.ui.theme.LocalArtmuseumColors
 import com.example.ui.theme.MyApplicationTheme
 import com.example.ui.theme.OlivePillActive
 import com.example.ui.theme.WarmPaper
@@ -76,8 +82,36 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        enableAdaptiveHighRefreshRate()
         setContent {
             ArtmuseumRootApp()
+        }
+    }
+
+    private fun enableAdaptiveHighRefreshRate() {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                window.decorView.post {
+                    val display = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                        display
+                    } else {
+                        @Suppress("DEPRECATION")
+                        windowManager.defaultDisplay
+                    }
+                    val modes = display?.supportedModes
+                    val optimalHighRefreshMode = modes?.maxWithOrNull(
+                        compareBy<Display.Mode> { it.refreshRate }
+                            .thenBy { it.physicalWidth * it.physicalHeight }
+                    )
+                    if (optimalHighRefreshMode != null && optimalHighRefreshMode.refreshRate > 60f) {
+                        val lp = window.attributes
+                        lp.preferredDisplayModeId = optimalHighRefreshMode.modeId
+                        window.attributes = lp
+                    }
+                }
+            }
+        } catch (_: Exception) {
+            // Gracefully ignore if device or emulator doesn't allow display mode changes
         }
     }
 }
@@ -86,23 +120,29 @@ sealed interface ArtmuseumDestination {
     data class MainTab(val tab: ArtmuseumTab) : ArtmuseumDestination
     data class PostDetail(val postId: String) : ArtmuseumDestination
     data object CreatePost : ArtmuseumDestination
+    data object DirectMessages : ArtmuseumDestination
+    data class DirectChat(val peerUid: String, val peerName: String, val peerPhoto: String) : ArtmuseumDestination
 }
 
 @Composable
 fun ArtmuseumRootApp(auth: FirebaseAuth = Firebase.auth) {
     val currentUser by auth.authStateFlow().collectAsStateWithLifecycle(initialValue = auth.currentUser)
     val user = currentUser
+    var isGuestMode by rememberSaveable { mutableStateOf(false) }
 
-    if (user == null) {
+    if (user == null && !isGuestMode) {
         MyApplicationTheme(palette = ArtmuseumThemePalette.CREAM) {
             ArtmuseumWelcomeAuthScreen(
-                onAuthSuccess = { /* AuthStateListener updates currentUser automatically */ }
+                onAuthSuccess = { /* AuthStateListener updates currentUser automatically */ },
+                onContinueAsGuest = { isGuestMode = true }
             )
         }
     } else {
         ArtmuseumAuthenticatedShell(
-            currentUserId = user.uid,
-            initialDisplayName = user.displayName ?: "Sophia"
+            currentUserId = user?.uid ?: "guest_visitor",
+            initialDisplayName = user?.displayName ?: "Guest Explorer",
+            isGuest = (user == null),
+            onExitGuestMode = { isGuestMode = false }
         )
     }
 }
@@ -110,14 +150,27 @@ fun ArtmuseumRootApp(auth: FirebaseAuth = Firebase.auth) {
 @Composable
 fun ArtmuseumAuthenticatedShell(
     currentUserId: String,
-    initialDisplayName: String
+    initialDisplayName: String,
+    isGuest: Boolean = false,
+    onExitGuestMode: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val credentialManager = remember(context) { CredentialManager.create(context) }
+    var showGuestSignInDialog by remember { mutableStateOf(false) }
+
+    val triggerGoogleSignIn: () -> Unit = {
+        onGoogleSignInClicked(
+            context = context,
+            credentialManager = credentialManager,
+            onAuthSuccess = { /* authStateFlow updates currentUser */ },
+            onAuthError = { /* gracefully handled */ },
+            scope = scope
+        )
+    }
 
     val viewModel: ArtmuseumViewModel = viewModel(
-        key = currentUserId,
+        key = "${currentUserId}_${isGuest}",
         factory = viewModelFactory {
             initializer {
                 val app = checkNotNull(this[APPLICATION_KEY]) {
@@ -140,7 +193,8 @@ fun ArtmuseumAuthenticatedShell(
                 ArtmuseumViewModel(
                     repository = ArtmuseumRepository(db),
                     currentUserId = currentUserId,
-                    initialDisplayName = initialDisplayName
+                    initialDisplayName = initialDisplayName,
+                    isGuest = isGuest
                 )
             }
         }
@@ -161,9 +215,10 @@ fun ArtmuseumAuthenticatedShell(
     val selectedPostComments by viewModel.selectedPostComments.collectAsStateWithLifecycle()
     val isSubmitting by viewModel.isSubmitting.collectAsStateWithLifecycle()
     val statusBanner by viewModel.statusBanner.collectAsStateWithLifecycle()
-
     val followersList by viewModel.followersList.collectAsStateWithLifecycle()
     val followingList by viewModel.followingList.collectAsStateWithLifecycle()
+    val conversations by viewModel.conversations.collectAsStateWithLifecycle()
+    val activeChatMessages by viewModel.activeChatMessages.collectAsStateWithLifecycle()
 
     var currentDestination by remember {
         mutableStateOf<ArtmuseumDestination>(ArtmuseumDestination.MainTab(ArtmuseumTab.HOME))
@@ -175,6 +230,7 @@ fun ArtmuseumAuthenticatedShell(
     val userProfile = (userProfileState as? UiState.Success)?.data
     val allFeedPosts = (feedState as? UiState.Success)?.data ?: emptyList()
     val unreadNotifications = remember(notifications) { notifications.count { !it.isRead } }
+    val unreadMessages = remember(conversations) { conversations.sumOf { it.unreadCount } }
 
     val permissionsToRequest = remember {
         buildList {
@@ -225,14 +281,20 @@ fun ArtmuseumAuthenticatedShell(
     MyApplicationTheme(palette = activeTheme) {
         val showBottomBar = currentDestination is ArtmuseumDestination.MainTab
         val activeTab = (currentDestination as? ArtmuseumDestination.MainTab)?.tab ?: ArtmuseumTab.HOME
+        val colors = LocalArtmuseumColors.current
 
         Scaffold(
+            containerColor = colors.background,
+            contentColor = colors.inkPrimary,
             bottomBar = {
                 if (showBottomBar) {
                     ArtmuseumBottomNavigation(
                         currentTab = activeTab,
                         onTabSelected = { tab ->
                             currentDestination = ArtmuseumDestination.MainTab(tab)
+                        },
+                        onCreatePostClick = {
+                            currentDestination = ArtmuseumDestination.CreatePost
                         }
                     )
                 }
@@ -241,7 +303,7 @@ fun ArtmuseumAuthenticatedShell(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(bottom = if (showBottomBar) innerPadding.calculateBottomPadding() * 0f else 0.dp)
+                    .padding(bottom = if (showBottomBar) innerPadding.calculateBottomPadding() else 0.dp)
             ) {
                 when (val dest = currentDestination) {
                     is ArtmuseumDestination.MainTab -> {
@@ -254,6 +316,7 @@ fun ArtmuseumAuthenticatedShell(
                                     likedPostIds = likedPostIds,
                                     savedPostIds = savedPostIds,
                                     unreadNotificationCount = unreadNotifications,
+                                    unreadMessageCount = unreadMessages,
                                     onSelectFilter = viewModel::selectFilter,
                                     onOpenPostDetail = { post ->
                                         viewModel.observeCommentsForPost(post.postId)
@@ -268,6 +331,9 @@ fun ArtmuseumAuthenticatedShell(
                                         currentDestination = ArtmuseumDestination.MainTab(ArtmuseumTab.EXPLORE)
                                     },
                                     onOpenNotifications = { showNotificationsSheet = true },
+                                    onOpenDirectMessages = {
+                                        currentDestination = ArtmuseumDestination.DirectMessages
+                                    },
                                     onOpenProfile = {
                                         currentDestination = ArtmuseumDestination.MainTab(ArtmuseumTab.PROFILE)
                                     },
@@ -278,7 +344,9 @@ fun ArtmuseumAuthenticatedShell(
                                     onDeleteOwnPost = { post ->
                                         viewModel.deletePost(post.postId)
                                     },
-                                    currentUserId = currentUserId
+                                    currentUserId = currentUserId,
+                                    isGuest = isGuest,
+                                    onGuestPrompt = { showGuestSignInDialog = true }
                                 )
                             }
 
@@ -331,6 +399,8 @@ fun ArtmuseumAuthenticatedShell(
                                     activeTheme = activeTheme,
                                     followersList = followersList,
                                     followingList = followingList,
+                                    isGuest = isGuest,
+                                    onSignInWithGoogle = triggerGoogleSignIn,
                                     onBackToHome = {
                                         currentDestination = ArtmuseumDestination.MainTab(ArtmuseumTab.HOME)
                                     },
@@ -354,19 +424,27 @@ fun ArtmuseumAuthenticatedShell(
                                     },
                                     onUnblockUser = viewModel::unblockUser,
                                     onSignOut = {
-                                        signOutArtmuseum(
-                                            credentialManager = credentialManager,
-                                            onSignOutComplete = {},
-                                            scope = scope
-                                        )
-                                    },
-                                    onDeleteAccount = {
-                                        viewModel.deleteOwnAccount {
+                                        if (isGuest) {
+                                            onExitGuestMode()
+                                        } else {
                                             signOutArtmuseum(
                                                 credentialManager = credentialManager,
                                                 onSignOutComplete = {},
                                                 scope = scope
                                             )
+                                        }
+                                    },
+                                    onDeleteAccount = {
+                                        if (isGuest) {
+                                            onExitGuestMode()
+                                        } else {
+                                            viewModel.deleteOwnAccount {
+                                                signOutArtmuseum(
+                                                    credentialManager = credentialManager,
+                                                    onSignOutComplete = {},
+                                                    scope = scope
+                                                )
+                                            }
                                         }
                                     },
                                     onShowMessage = viewModel::showBannerMessage
@@ -390,11 +468,19 @@ fun ArtmuseumAuthenticatedShell(
                                 },
                                 onToggleLike = { viewModel.toggleLike(post) },
                                 onToggleSave = { viewModel.toggleSave(post.postId) },
-                                onSendComment = { text ->
-                                    viewModel.sendComment(post, text, onComplete = {})
+                                onSendComment = { text, parentId, replyAuthor ->
+                                    viewModel.sendComment(post, text, parentId, replyAuthor, onComplete = {})
                                 },
                                 onDeleteComment = { commentId ->
                                     viewModel.deleteComment(post.postId, commentId)
+                                },
+                                onToggleCommentLike = { commentId ->
+                                    viewModel.toggleCommentLike(post.postId, commentId)
+                                },
+                                onMessageAuthor = { peerUid, peerName, peerPhoto ->
+                                    val chatId = if (peerUid.startsWith("chat_")) peerUid else "chat_${peerUid.take(16)}"
+                                    viewModel.openChat(chatId)
+                                    currentDestination = ArtmuseumDestination.DirectChat(peerUid, peerName, peerPhoto)
                                 },
                                 onReportPost = { reportTargetPost = post },
                                 onDeletePost = {
@@ -429,6 +515,48 @@ fun ArtmuseumAuthenticatedShell(
                             },
                             onThemeChanged = viewModel::selectTheme,
                             onShowMessage = viewModel::showBannerMessage
+                        )
+                    }
+
+                    is ArtmuseumDestination.DirectMessages -> {
+                        DirectMessagesListScreen(
+                            conversations = conversations,
+                            onOpenConversation = { conv ->
+                                viewModel.openChat(conv.chatId)
+                                currentDestination = ArtmuseumDestination.DirectChat(
+                                    conv.peerUid,
+                                    conv.peerName,
+                                    conv.peerPhotoURL
+                                )
+                            },
+                            onStartNewChat = { uid, name, photo ->
+                                val chatId = if (uid.startsWith("chat_")) uid else "chat_${uid.take(16)}"
+                                viewModel.openChat(chatId)
+                                currentDestination = ArtmuseumDestination.DirectChat(uid, name, photo)
+                            },
+                            onBack = {
+                                currentDestination = ArtmuseumDestination.MainTab(ArtmuseumTab.HOME)
+                            }
+                        )
+                    }
+
+                    is ArtmuseumDestination.DirectChat -> {
+                        ChatConversationScreen(
+                            peerUid = dest.peerUid,
+                            peerName = dest.peerName,
+                            peerPhoto = dest.peerPhoto,
+                            messages = activeChatMessages,
+                            onSendMessage = { text ->
+                                viewModel.sendDirectMessage(
+                                    peerUid = dest.peerUid,
+                                    peerName = dest.peerName,
+                                    peerPhoto = dest.peerPhoto,
+                                    text = text
+                                )
+                            },
+                            onBack = {
+                                currentDestination = ArtmuseumDestination.DirectMessages
+                            }
                         )
                     }
                 }
@@ -517,6 +645,13 @@ fun ArtmuseumAuthenticatedShell(
                 onGrantRequested = {
                     shellPermissionsLauncher.launch(permissionsToRequest)
                 }
+            )
+        }
+
+        if (showGuestSignInDialog) {
+            GuestSignInPromptDialog(
+                onDismiss = { showGuestSignInDialog = false },
+                onSignInWithGoogle = triggerGoogleSignIn
             )
         }
     }

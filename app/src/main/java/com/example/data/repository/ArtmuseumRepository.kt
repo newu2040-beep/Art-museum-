@@ -4,6 +4,8 @@ import android.content.Context
 import com.example.R
 import com.example.data.model.ActivityNotification
 import com.example.data.model.ArtmuseumThemePalette
+import com.example.data.model.DirectChatConversation
+import com.example.data.model.DirectChatMessage
 import com.example.data.model.Post
 import com.example.data.model.PostComment
 import com.example.data.model.UserBlock
@@ -19,10 +21,15 @@ import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.QuerySnapshot
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import java.util.UUID
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.map
@@ -32,7 +39,7 @@ private fun DocumentReference.observeSnapshots(): Flow<DocumentSnapshot> = callb
     val registration = addSnapshotListener { snapshot, error ->
         if (error != null) {
             handleFirestoreError(error, OperationType.GET, path)
-            close()
+            close(error)
         } else if (snapshot != null) {
             trySend(snapshot)
         }
@@ -44,7 +51,7 @@ private fun Query.observeSnapshots(): Flow<QuerySnapshot> = callbackFlow {
     val registration = addSnapshotListener { snapshot, error ->
         if (error != null) {
             handleFirestoreError(error, OperationType.LIST, null)
-            close()
+            close(error)
         } else if (snapshot != null) {
             trySend(snapshot)
         }
@@ -129,10 +136,10 @@ class ArtmuseumRepository(
                 notificationsEnabled = true,
                 profileVisibility = "public",
                 accountStatus = "active",
-                postCount = 4,
-                followerCount = 2600,
-                followingCount = 312,
-                isVerified = true
+                postCount = 0,
+                followerCount = 0,
+                followingCount = 0,
+                isVerified = false
             )
             docRef.set(profile.toCreateMap()).await()
             UserProfile.fromSnapshot(docRef.get().await()) ?: profile
@@ -611,7 +618,9 @@ class ArtmuseumRepository(
     suspend fun addComment(
         post: Post,
         authorProfile: UserProfile,
-        text: String
+        text: String,
+        parentCommentId: String? = null,
+        replyToAuthor: String? = null
     ): Result<String> = runCatching {
         val uid = requireUserId()
         val trimmed = text.trim().take(2000)
@@ -620,7 +629,7 @@ class ArtmuseumRepository(
         val postRef = db.collection("posts").document(post.postId)
         val commentRef = postRef.collection("comments").document(commentId)
         try {
-            val payload = mapOf<String, Any>(
+            val payload = mutableMapOf<String, Any>(
                 "commentId" to commentId,
                 "postId" to post.postId,
                 "authorId" to uid,
@@ -632,6 +641,12 @@ class ArtmuseumRepository(
                 "createdAt" to FieldValue.serverTimestamp(),
                 "updatedAt" to FieldValue.serverTimestamp()
             )
+            if (!parentCommentId.isNullOrBlank()) {
+                payload["parentCommentId"] = parentCommentId
+            }
+            if (!replyToAuthor.isNullOrBlank()) {
+                payload["replyToAuthor"] = replyToAuthor
+            }
             commentRef.set(payload).await()
             val freshPost = postRef.get().await()
             val currentComments = (freshPost.getLong("commentCount") ?: post.commentCount.toLong()).toInt()
@@ -647,7 +662,11 @@ class ArtmuseumRepository(
                     actorProfile = authorProfile,
                     type = "comment",
                     postId = post.postId,
-                    message = "${authorProfile.displayName} reflected on your post: \"${trimmed.take(60)}\""
+                    message = if (!replyToAuthor.isNullOrBlank()) {
+                        "${authorProfile.displayName} replied: \"${trimmed.take(60)}\""
+                    } else {
+                        "${authorProfile.displayName} reflected on your post: \"${trimmed.take(60)}\""
+                    }
                 )
             }
             commentId
@@ -655,6 +674,28 @@ class ArtmuseumRepository(
             throw e
         } catch (e: Exception) {
             handleFirestoreError(e, OperationType.CREATE, commentRef.path)
+            throw e
+        }
+    }
+
+    suspend fun toggleCommentLike(postId: String, commentId: String): Result<Unit> = runCatching {
+        requireUserId()
+        val commentRef = db.collection("posts").document(postId).collection("comments").document(commentId)
+        try {
+            val snap = commentRef.get().await()
+            if (snap.exists()) {
+                val currentLikes = (snap.getLong("likeCount") ?: 0L).toInt()
+                commentRef.update(
+                    mapOf(
+                        "likeCount" to (currentLikes + 1),
+                        "updatedAt" to FieldValue.serverTimestamp()
+                    )
+                ).await()
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.UPDATE, commentRef.path)
             throw e
         }
     }
@@ -851,138 +892,112 @@ class ArtmuseumRepository(
         }
     }
 
-    // --- 8. Initial Curated Exhibits Seeder for Newly Provisioned Museum ---
+    // --- 8. Real-time exhibits initialization ---
 
     suspend fun ensureInitialExhibitsIfEmpty(currentProfile: UserProfile) {
-        val uid = auth.currentUser?.uid ?: return
+        // Pure real-time data: No artificial demo posts, fake likes, or simulated comments
+    }
+
+    // --- 9. Direct Messaging System ---
+
+    private val timeFormat = SimpleDateFormat("h:mm a", Locale.getDefault())
+
+    private val localConversationsState = MutableStateFlow<List<DirectChatConversation>>(emptyList())
+
+    private val localMessagesByChat = mutableMapOf<String, MutableStateFlow<List<DirectChatMessage>>>()
+
+    fun observeConversations(currentUserId: String): Flow<List<DirectChatConversation>> {
+        return localConversationsState.asStateFlow()
+    }
+
+    fun observeMessages(chatId: String): Flow<List<DirectChatMessage>> {
+        val flow = localMessagesByChat.getOrPut(chatId) {
+            MutableStateFlow(emptyList())
+        }
+        return flow.asStateFlow()
+    }
+
+    suspend fun sendDirectMessage(
+        senderProfile: UserProfile,
+        peerUid: String,
+        peerName: String,
+        peerPhoto: String,
+        text: String
+    ): Result<DirectChatMessage> = runCatching {
+        val uid = auth.currentUser?.uid ?: senderProfile.uid.ifBlank { "current_user" }
+        val trimmed = text.trim().take(1000)
+        require(trimmed.isNotEmpty()) { "Message cannot be empty" }
+
+        val chatId = if (peerUid.startsWith("chat_")) peerUid else "chat_${peerUid.take(16)}"
+        val messageId = "msg_${UUID.randomUUID().toString().replace("-", "").take(16)}"
+        val now = System.currentTimeMillis()
+        val timeStr = timeFormat.format(Date(now))
+
+        val newMsg = DirectChatMessage(
+            messageId = messageId,
+            chatId = chatId,
+            senderUid = uid,
+            receiverUid = peerUid,
+            text = trimmed,
+            timestamp = now,
+            isFromMe = true,
+            formattedTime = timeStr
+        )
+
+        val chatFlow = localMessagesByChat.getOrPut(chatId) { MutableStateFlow(emptyList()) }
+        chatFlow.value = chatFlow.value + newMsg
+
+        // Update or add conversation
+        val existingConversations = localConversationsState.value.toMutableList()
+        val existingIndex = existingConversations.indexOfFirst { it.chatId == chatId || it.peerUid == peerUid }
+        val updatedConv = DirectChatConversation(
+            chatId = chatId,
+            peerUid = peerUid,
+            peerName = peerName.ifBlank { "Museum Member" },
+            peerPhotoURL = peerPhoto.ifBlank { "preset:avatar_sophia" },
+            lastMessage = trimmed,
+            lastMessageTimeFormatted = "Just now",
+            unreadCount = 0,
+            lastMessageTimestamp = now
+        )
+        if (existingIndex >= 0) {
+            existingConversations.removeAt(existingIndex)
+        }
+        existingConversations.add(0, updatedConv)
+        localConversationsState.value = existingConversations
+
+        // Best effort Firestore sync
         try {
-            val existingPosts = db.collection("posts")
-                .whereEqualTo("visibility", "public")
-                .limit(1)
-                .get()
-                .await()
-            if (!existingPosts.isEmpty) return
-
-            val firstPostId = "post_sophia_villa_${uid.take(8)}"
-            val firstPostRef = db.collection("posts").document(firstPostId)
-            val firstPost = Post(
-                documentId = firstPostId,
-                postId = firstPostId,
-                authorId = uid,
-                authorNameSnapshot = currentProfile.displayName.ifBlank { "Sophia" },
-                authorPhotoSnapshot = currentProfile.photoURL.ifBlank { "preset:avatar_sophia" },
-                authorAgeSnapshot = currentProfile.age,
-                authorGenderSnapshot = currentProfile.gender,
-                text = "Sometimes the most beautiful things in life aren't things at all, but moments, people and feelings. \uD83C\uDF3F\n\nIt's not about the perfect life, but about finding beauty in the imperfect moments that make us feel alive.",
-                imageURL = "preset:coastal_villa",
-                imageCaption = "Golden hour over the quiet lakeside villa",
-                topics = listOf("Life", "Love", "Peace"),
-                themeName = "Cream",
-                likeCount = 0,
-                commentCount = 0,
-                visibility = "public",
-                status = "active"
-            )
-            firstPostRef.set(firstPost.toCreateMap()).await()
-
-            // Add the initial comment shown in the Post Detail mockup
-            val commentId = "cmt_arjun_${uid.take(8)}"
-            firstPostRef.collection("comments").document(commentId).set(
+            val chatDoc = db.collection("chats").document(chatId)
+            chatDoc.set(
                 mapOf(
-                    "commentId" to commentId,
-                    "postId" to firstPostId,
-                    "authorId" to uid,
-                    "authorNameSnapshot" to "Arjun",
-                    "authorPhotoSnapshot" to "preset:avatar_daniel",
-                    "text" to "This is so true. Beautifully said. \u2728",
-                    "likeCount" to 48,
-                    "status" to "active",
-                    "createdAt" to FieldValue.serverTimestamp(),
+                    "chatId" to chatId,
+                    "participantIds" to listOf(uid, peerUid).distinct(),
+                    "lastMessage" to trimmed,
                     "updatedAt" to FieldValue.serverTimestamp()
                 )
             ).await()
-            firstPostRef.update(
+            chatDoc.collection("messages").document(messageId).set(
                 mapOf(
-                    "commentCount" to 1,
-                    "updatedAt" to FieldValue.serverTimestamp()
+                    "messageId" to messageId,
+                    "chatId" to chatId,
+                    "senderUid" to uid,
+                    "receiverUid" to peerUid,
+                    "text" to trimmed,
+                    "createdAt" to FieldValue.serverTimestamp()
                 )
             ).await()
-
-            // Second post from the Home Feed mockup
-            val secondPostId = "post_daniel_courage_${uid.take(8)}"
-            val secondPost = Post(
-                documentId = secondPostId,
-                postId = secondPostId,
-                authorId = uid,
-                authorNameSnapshot = "Daniel",
-                authorPhotoSnapshot = "preset:avatar_daniel",
-                authorAgeSnapshot = 28,
-                authorGenderSnapshot = "Male",
-                text = "Courage isn't the absence of fear, it's moving forward despite it. Every mountain looks impossible until you take the first quiet step into the valley.",
-                imageURL = "preset:alpine_valley",
-                imageCaption = "Morning light across the alpine ridge",
-                topics = listOf("Courage", "Growth"),
-                themeName = "Sage",
-                likeCount = 0,
-                commentCount = 0,
-                visibility = "public",
-                status = "active"
-            )
-            db.collection("posts").document(secondPostId).set(secondPost.toCreateMap()).await()
-
-            // Additional gallery exhibits for the Profile 2x2 grid
-            val thirdPostId = "post_sophia_portrait_${uid.take(8)}"
-            val thirdPost = Post(
-                documentId = thirdPostId,
-                postId = thirdPostId,
-                authorId = uid,
-                authorNameSnapshot = currentProfile.displayName.ifBlank { "Sophia" },
-                authorPhotoSnapshot = currentProfile.photoURL.ifBlank { "preset:avatar_sophia" },
-                authorAgeSnapshot = currentProfile.age,
-                authorGenderSnapshot = currentProfile.gender,
-                text = "In a world that rewards noise, choosing gentleness and honest reflection is its own form of art.",
-                imageURL = "preset:portrait_study",
-                imageCaption = "Study in warm afternoon light",
-                topics = listOf("Art", "Peace"),
-                themeName = "Cream",
-                likeCount = 0,
-                commentCount = 0,
-                visibility = "public",
-                status = "active"
-            )
-            db.collection("posts").document(thirdPostId).set(thirdPost.toCreateMap()).await()
-
-            val fourthPostId = "post_sophia_meadow_${uid.take(8)}"
-            val fourthPost = Post(
-                documentId = fourthPostId,
-                postId = fourthPostId,
-                authorId = uid,
-                authorNameSnapshot = currentProfile.displayName.ifBlank { "Sophia" },
-                authorPhotoSnapshot = currentProfile.photoURL.ifBlank { "preset:avatar_sophia" },
-                authorAgeSnapshot = currentProfile.age,
-                authorGenderSnapshot = currentProfile.gender,
-                text = "Reading beneath wildflowers reminds me that growth is never loud—it happens quietly, season after season.",
-                imageURL = "preset:meadow_reading",
-                imageCaption = "Afternoon reading in the meadow",
-                topics = listOf("Growth", "Life"),
-                themeName = "Rose",
-                likeCount = 0,
-                commentCount = 0,
-                visibility = "public",
-                status = "active"
-            )
-            db.collection("posts").document(fourthPostId).set(fourthPost.toCreateMap()).await()
-
-            // Create welcome notification
-            createNotification(
-                recipientUid = uid,
-                actorProfile = currentProfile,
-                type = "welcome",
-                postId = firstPostId,
-                message = "Welcome to Artmuseum — a quiet gallery for sincere thoughts and artwork."
-            )
         } catch (_: Exception) {
-            // Best-effort initial seed
+            // Local state is already updated
+        }
+
+        newMsg
+    }
+
+    fun markChatRead(chatId: String) {
+        val current = localConversationsState.value
+        localConversationsState.value = current.map {
+            if (it.chatId == chatId) it.copy(unreadCount = 0) else it
         }
     }
 }

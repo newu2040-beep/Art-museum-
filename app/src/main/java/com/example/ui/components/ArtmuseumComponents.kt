@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -27,6 +28,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Send
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
@@ -80,6 +82,7 @@ import com.example.ui.theme.GallerySage
 import com.example.ui.theme.HeartCrimson
 import com.example.ui.theme.InkPrimary
 import com.example.ui.theme.LocalArtmuseumColors
+import com.example.ui.theme.LocalArtmuseumDimensions
 import com.example.ui.theme.MuseumBorder
 import com.example.ui.theme.MutedTaupe
 import com.example.ui.theme.OlivePillActive
@@ -599,19 +602,16 @@ fun ArtmuseumPostCard(
     modifier: Modifier = Modifier
 ) {
     val colors = LocalArtmuseumColors.current
-    val cardPalette = ArtmuseumThemePalette.fromName(post.themeName)
-    val cardBg = if (colors.palette == ArtmuseumThemePalette.MIDNIGHT) {
-        colors.cardSurface
-    } else {
-        Color(cardPalette.cardSurfaceHex)
-    }
+    val dimens = LocalArtmuseumDimensions.current
+    // Whole UI active theme card background
+    val cardBg = colors.cardSurface
 
     Surface(
         onClick = onCardClick,
         shape = ArtmuseumShapeTokens.Card,
         color = cardBg,
-        border = BorderStroke(0.8.dp, colors.border.copy(alpha = 0.7f)),
-        shadowElevation = 1.dp,
+        border = BorderStroke(0.6.dp, colors.border),
+        shadowElevation = 1.5.dp,
         modifier = modifier
             .fillMaxWidth()
             .testTag("post_card_${post.postId}")
@@ -619,9 +619,9 @@ fun ArtmuseumPostCard(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp)
+                .padding(dimens.cardPadding)
         ) {
-            // Author Header Row (matches mockup: Avatar + Sophia / 23 · Female + overflow ⋮)
+            // Author Header Row
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth()
@@ -629,28 +629,28 @@ fun ArtmuseumPostCard(
                 ArtmuseumAvatar(
                     photoURL = post.authorPhotoSnapshot,
                     contentDescription = post.authorNameSnapshot,
-                    size = 40.dp,
+                    size = dimens.avatarSizeMedium,
                     onClick = onAuthorClick
                 )
-                Spacer(modifier = Modifier.width(11.dp))
+                Spacer(modifier = Modifier.width(10.dp))
                 Column(
                     modifier = Modifier
                         .weight(1f)
                         .clickable(onClick = onAuthorClick)
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = post.authorNameSnapshot,
-                            style = MaterialTheme.typography.titleMedium.copy(
-                                fontWeight = FontWeight.SemiBold,
-                                fontSize = 15.sp
-                            ),
-                            color = colors.inkPrimary
-                        )
-                    }
+                    Text(
+                        text = post.authorNameSnapshot,
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = if (dimens.isCompact) 14.sp else 15.sp
+                        ),
+                        color = colors.inkPrimary
+                    )
                     Text(
                         text = "${post.authorAgeSnapshot} · ${post.authorGenderSnapshot}",
-                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            fontSize = if (dimens.isCompact) 11.5.sp else 12.sp
+                        ),
                         color = colors.mutedText
                     )
                 }
@@ -667,9 +667,8 @@ fun ArtmuseumPostCard(
                 )
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
-            // For text-first posts without artwork or with artwork below text (like Daniel's card)
             val hasArtwork = post.imageURL.isNotBlank()
             val showTextAboveImage = post.authorNameSnapshot.equals("Daniel", ignoreCase = true)
 
@@ -677,15 +676,15 @@ fun ArtmuseumPostCard(
                 Text(
                     text = post.text,
                     style = MaterialTheme.typography.bodyLarge.copy(
-                        fontSize = 14.5.sp,
-                        lineHeight = 21.sp
+                        fontSize = if (dimens.isCompact) 13.5.sp else 14.5.sp,
+                        lineHeight = if (dimens.isCompact) 19.sp else 21.sp
                     ),
                     color = colors.inkPrimary,
                     maxLines = 4,
                     overflow = TextOverflow.Ellipsis
                 )
                 if (hasArtwork) {
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
                 }
             }
 
@@ -695,27 +694,27 @@ fun ArtmuseumPostCard(
                     contentDescription = post.imageCaption.ifBlank { "Exhibit artwork" },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(196.dp)
+                        .height(if (dimens.isCompact) 180.dp else 210.dp)
                         .clip(ArtmuseumShapeTokens.ArtworkFrame)
                 )
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(10.dp))
             }
 
             if (!showTextAboveImage && post.text.isNotBlank()) {
                 Text(
                     text = post.text.substringBefore("\n\n"),
                     style = MaterialTheme.typography.bodyLarge.copy(
-                        fontSize = 14.5.sp,
-                        lineHeight = 21.sp
+                        fontSize = if (dimens.isCompact) 13.5.sp else 14.5.sp,
+                        lineHeight = if (dimens.isCompact) 19.sp else 21.sp
                     ),
                     color = colors.inkPrimary,
                     maxLines = 4,
                     overflow = TextOverflow.Ellipsis
                 )
-                Spacer(modifier = Modifier.height(14.dp))
+                Spacer(modifier = Modifier.height(12.dp))
             }
 
-            // Action Pill Row (matches mockup: [❤️ 1.2k] pill, [Bookmark] pill, [Share] pill)
+            // Real-time Action Pill Row
             PostEngagementPillRow(
                 likeCount = post.likeCount,
                 isLiked = isLiked,
@@ -740,49 +739,51 @@ fun PostEngagementPillRow(
     postId: String = ""
 ) {
     val colors = LocalArtmuseumColors.current
+    val dimens = LocalArtmuseumDimensions.current
+
+    // Real-time honest like count: no fake "1.2k" simulation!
     val formattedLikes = remember(likeCount) {
         when {
             likeCount >= 1000 -> String.format(Locale.US, "%.1fk", likeCount / 1000f)
-            likeCount == 0 -> "1.2k"
             else -> likeCount.toString()
         }
     }
 
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         // 1. Like Pill
         Surface(
             onClick = onLikeClick,
             shape = ArtmuseumShapeTokens.Pill,
-            color = colors.subtleSurface,
-            border = BorderStroke(0.8.dp, colors.border),
+            color = if (isLiked) HeartCrimson.copy(alpha = 0.12f) else colors.subtleSurface,
+            border = BorderStroke(0.6.dp, if (isLiked) HeartCrimson.copy(alpha = 0.35f) else colors.border),
             modifier = Modifier
                 .weight(1f)
-                .height(40.dp)
+                .height(dimens.postActionPillHeight)
                 .testTag("like_button_$postId")
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.Center,
-                modifier = Modifier.padding(horizontal = 14.dp)
+                modifier = Modifier.padding(horizontal = 10.dp)
             ) {
                 Icon(
-                    imageVector = if (isLiked) Icons.Filled.Favorite else Icons.Filled.Favorite,
-                    contentDescription = "Like post",
-                    tint = if (isLiked) HeartCrimson else HeartCrimson.copy(alpha = 0.88f),
-                    modifier = Modifier.size(18.dp)
+                    imageVector = if (isLiked) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                    contentDescription = "Like exhibit",
+                    tint = if (isLiked) HeartCrimson else colors.mutedText,
+                    modifier = Modifier.size(16.dp)
                 )
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(
                     text = formattedLikes,
                     style = MaterialTheme.typography.labelLarge.copy(
                         fontWeight = FontWeight.SemiBold,
-                        fontSize = 13.sp
+                        fontSize = 12.5.sp
                     ),
-                    color = colors.inkPrimary
+                    color = if (isLiked) HeartCrimson else colors.inkPrimary
                 )
             }
         }
@@ -791,40 +792,40 @@ fun PostEngagementPillRow(
         Surface(
             onClick = onSaveClick,
             shape = ArtmuseumShapeTokens.Pill,
-            color = if (isSaved) colors.pillSelectedFill.copy(alpha = 0.14f) else colors.subtleSurface,
-            border = BorderStroke(0.8.dp, colors.border),
+            color = if (isSaved) colors.pillSelectedFill.copy(alpha = 0.15f) else colors.subtleSurface,
+            border = BorderStroke(0.6.dp, if (isSaved) colors.pillSelectedFill.copy(alpha = 0.35f) else colors.border),
             modifier = Modifier
                 .weight(1f)
-                .height(40.dp)
+                .height(dimens.postActionPillHeight)
                 .testTag("save_button_$postId")
         ) {
             Box(contentAlignment = Alignment.Center) {
                 Icon(
                     imageVector = if (isSaved) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
-                    contentDescription = "Save post",
+                    contentDescription = "Save exhibit",
                     tint = if (isSaved) colors.pillSelectedFill else colors.inkPrimary,
-                    modifier = Modifier.size(19.dp)
+                    modifier = Modifier.size(17.dp)
                 )
             }
         }
 
-        // 3. Share / Paper-plane Pill
+        // 3. Share Pill
         Surface(
             onClick = onShareClick,
             shape = ArtmuseumShapeTokens.Pill,
             color = colors.subtleSurface,
-            border = BorderStroke(0.8.dp, colors.border),
+            border = BorderStroke(0.6.dp, colors.border),
             modifier = Modifier
                 .weight(0.85f)
-                .height(40.dp)
+                .height(dimens.postActionPillHeight)
                 .testTag("share_button_$postId")
         ) {
             Box(contentAlignment = Alignment.Center) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Outlined.Send,
-                    contentDescription = "Share post",
+                    contentDescription = "Share exhibit",
                     tint = colors.inkPrimary,
-                    modifier = Modifier.size(18.dp)
+                    modifier = Modifier.size(16.dp)
                 )
             }
         }
@@ -923,6 +924,13 @@ fun ArtmuseumThemeSwatch(
         ArtmuseumThemePalette.LAVENDER -> Color(0xFFB5A8CC)
         ArtmuseumThemePalette.SUNSET -> Color(0xFFD88055)
         ArtmuseumThemePalette.OLIVE -> Color(0xFF5B694D)
+        ArtmuseumThemePalette.STRAWBERRY_MILK -> Color(0xFFF799B5)
+        ArtmuseumThemePalette.PEACH_MOCHI -> Color(0xFFF7A287)
+        ArtmuseumThemePalette.MATCHA_LATTE -> Color(0xFF8CAF77)
+        ArtmuseumThemePalette.BUTTER_HONEY -> Color(0xFFF2BD44)
+        ArtmuseumThemePalette.COTTON_CANDY -> Color(0xFFA594E6)
+        ArtmuseumThemePalette.MINT_MACARON -> Color(0xFF67C2AE)
+        ArtmuseumThemePalette.VANILLA_CHAI -> Color(0xFFC79872)
         ArtmuseumThemePalette.MIDNIGHT -> Color(0xFF343B40)
         ArtmuseumThemePalette.OBSIDIAN -> Color(0xFF1C1C20)
         ArtmuseumThemePalette.DARK_EMERALD -> Color(0xFF1A2B23)
@@ -985,12 +993,15 @@ enum class ArtmuseumTab(val label: String, val testTag: String) {
 fun ArtmuseumBottomNavigation(
     currentTab: ArtmuseumTab,
     onTabSelected: (ArtmuseumTab) -> Unit,
+    onCreatePostClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val colors = LocalArtmuseumColors.current
+    val dimens = LocalArtmuseumDimensions.current
+
     Surface(
-        color = colors.cardSurface.copy(alpha = 0.96f),
-        border = BorderStroke(0.8.dp, colors.border.copy(alpha = 0.7f)),
+        color = colors.cardSurface,
+        border = BorderStroke(0.6.dp, colors.border.copy(alpha = 0.8f)),
         shadowElevation = 6.dp,
         modifier = modifier.fillMaxWidth()
     ) {
@@ -998,53 +1009,117 @@ fun ArtmuseumBottomNavigation(
             modifier = Modifier
                 .fillMaxWidth()
                 .navigationBarsPadding()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
+                .padding(horizontal = 6.dp, vertical = if (dimens.isCompact) 3.dp else 5.dp),
             horizontalArrangement = Arrangement.SpaceAround,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            ArtmuseumTab.entries.forEach { tab ->
-                val selected = tab == currentTab
-                val icon = when (tab) {
-                    ArtmuseumTab.HOME -> if (selected) Icons.Filled.Home else Icons.Outlined.Home
-                    ArtmuseumTab.EXPLORE -> Icons.Outlined.Explore
-                    ArtmuseumTab.SAVED -> if (selected) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder
-                    ArtmuseumTab.PROFILE -> Icons.Outlined.PersonOutline
-                }
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
+            // 1. Home Tab
+            ArtmuseumNavItem(
+                tab = ArtmuseumTab.HOME,
+                selected = currentTab == ArtmuseumTab.HOME,
+                onClick = { onTabSelected(ArtmuseumTab.HOME) }
+            )
+
+            // 2. Explore Tab
+            ArtmuseumNavItem(
+                tab = ArtmuseumTab.EXPLORE,
+                selected = currentTab == ArtmuseumTab.EXPLORE,
+                onClick = { onTabSelected(ArtmuseumTab.EXPLORE) }
+            )
+
+            // 3. Center Post Plus Action Button (Shifted into center between Explore & Saved)
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier
+                    .padding(horizontal = 2.dp)
+                    .offset(y = (-3).dp)
+            ) {
+                Surface(
+                    shape = CircleShape,
+                    color = colors.pillSelectedFill,
+                    shadowElevation = 6.dp,
+                    border = BorderStroke(2.dp, colors.cardSurface),
                     modifier = Modifier
-                        .clip(RoundedCornerShape(16.dp))
-                        .clickable { onTabSelected(tab) }
-                        .padding(horizontal = 12.dp, vertical = 2.dp)
-                        .testTag(tab.testTag)
+                        .size(dimens.bottomNavCenterButtonSize)
+                        .clip(CircleShape)
+                        .clickable(onClick = onCreatePostClick)
+                        .testTag("nav_create_post_button")
+                        .testTag("fab_create_post")
                 ) {
-                    Box(
-                        contentAlignment = Alignment.Center,
-                        modifier = Modifier
-                            .width(42.dp)
-                            .height(28.dp)
-                            .clip(ArtmuseumShapeTokens.Pill)
-                            .background(if (selected) colors.navActivePill else Color.Transparent)
-                    ) {
+                    Box(contentAlignment = Alignment.Center) {
                         Icon(
-                            imageVector = icon,
-                            contentDescription = tab.label,
-                            tint = if (selected) WarmPaper else colors.mutedText,
-                            modifier = Modifier.size(19.dp)
+                            imageVector = Icons.Filled.Add,
+                            contentDescription = "Create exhibit",
+                            tint = Color.White,
+                            modifier = Modifier.size(if (dimens.isCompact) 22.dp else 25.dp)
                         )
                     }
-                    Spacer(modifier = Modifier.height(3.dp))
-                    Text(
-                        text = tab.label,
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            fontSize = 11.sp,
-                            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium
-                        ),
-                        color = if (selected) colors.inkPrimary else colors.mutedText
-                    )
                 }
             }
+
+            // 4. Saved Tab
+            ArtmuseumNavItem(
+                tab = ArtmuseumTab.SAVED,
+                selected = currentTab == ArtmuseumTab.SAVED,
+                onClick = { onTabSelected(ArtmuseumTab.SAVED) }
+            )
+
+            // 5. Profile Tab
+            ArtmuseumNavItem(
+                tab = ArtmuseumTab.PROFILE,
+                selected = currentTab == ArtmuseumTab.PROFILE,
+                onClick = { onTabSelected(ArtmuseumTab.PROFILE) }
+            )
         }
+    }
+}
+
+@Composable
+private fun ArtmuseumNavItem(
+    tab: ArtmuseumTab,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    val colors = LocalArtmuseumColors.current
+    val dimens = LocalArtmuseumDimensions.current
+    val icon = when (tab) {
+        ArtmuseumTab.HOME -> if (selected) Icons.Filled.Home else Icons.Outlined.Home
+        ArtmuseumTab.EXPLORE -> Icons.Outlined.Explore
+        ArtmuseumTab.SAVED -> if (selected) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder
+        ArtmuseumTab.PROFILE -> Icons.Outlined.PersonOutline
+    }
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .clip(RoundedCornerShape(14.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 6.dp, vertical = 2.dp)
+            .testTag(tab.testTag)
+    ) {
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier
+                .width(if (dimens.isCompact) 38.dp else 42.dp)
+                .height(if (dimens.isCompact) 25.dp else 28.dp)
+                .clip(ArtmuseumShapeTokens.Pill)
+                .background(if (selected) colors.navActivePill else Color.Transparent)
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = tab.label,
+                tint = if (selected) Color.White else colors.mutedText,
+                modifier = Modifier.size(if (dimens.isCompact) 17.dp else 19.dp)
+            )
+        }
+        Spacer(modifier = Modifier.height(2.dp))
+        Text(
+            text = tab.label,
+            style = MaterialTheme.typography.labelSmall.copy(
+                fontSize = if (dimens.isCompact) 10.sp else 11.sp,
+                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium
+            ),
+            color = if (selected) colors.inkPrimary else colors.mutedText
+        )
     }
 }
 
