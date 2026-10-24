@@ -47,6 +47,7 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.example.data.model.ArtmuseumThemePalette
 import com.example.data.model.Post
 import com.example.data.model.UserFollow
+import com.example.data.model.UserProfile
 import android.view.Display
 import com.example.data.repository.ArtmuseumRepository
 import com.example.ui.auth.ArtmuseumIntroPermissionsDialog
@@ -59,6 +60,7 @@ import com.example.ui.components.ArtmuseumBottomNavigation
 import com.example.ui.components.ArtmuseumTab
 import com.example.ui.screens.ChatConversationScreen
 import com.example.ui.screens.CreatePostScreen
+import com.example.ui.screens.CreatorProfileSheet
 import com.example.ui.screens.DirectMessagesListScreen
 import com.example.ui.screens.ExploreScreen
 import com.example.ui.screens.HomeFeedScreen
@@ -226,6 +228,7 @@ fun ArtmuseumAuthenticatedShell(
     var showNotificationsSheet by remember { mutableStateOf(false) }
     var reportTargetPost by remember { mutableStateOf<Post?>(null) }
     var reportReason by remember { mutableStateOf("") }
+    var creatorProfileTarget by remember { mutableStateOf<UserProfile?>(null) }
 
     val userProfile = (userProfileState as? UiState.Success)?.data
     val allFeedPosts = (feedState as? UiState.Success)?.data ?: emptyList()
@@ -315,6 +318,7 @@ fun ArtmuseumAuthenticatedShell(
                                     selectedFilter = selectedFilter,
                                     likedPostIds = likedPostIds,
                                     savedPostIds = savedPostIds,
+                                    followingUserIds = followingUserIds,
                                     unreadNotificationCount = unreadNotifications,
                                     unreadMessageCount = unreadMessages,
                                     onSelectFilter = viewModel::selectFilter,
@@ -324,6 +328,7 @@ fun ArtmuseumAuthenticatedShell(
                                     },
                                     onToggleLike = viewModel::toggleLike,
                                     onToggleSave = viewModel::toggleSave,
+                                    onToggleFollowUser = viewModel::toggleFollowUser,
                                     onOpenCreatePost = {
                                         currentDestination = ArtmuseumDestination.CreatePost
                                     },
@@ -336,6 +341,15 @@ fun ArtmuseumAuthenticatedShell(
                                     },
                                     onOpenProfile = {
                                         currentDestination = ArtmuseumDestination.MainTab(ArtmuseumTab.PROFILE)
+                                    },
+                                    onOpenCreatorProfile = { authorId, authorName, authorPhoto ->
+                                        val existing = publicUsers.firstOrNull { it.uid == authorId }
+                                        creatorProfileTarget = existing ?: UserProfile(
+                                            uid = authorId,
+                                            displayName = authorName,
+                                            photoURL = authorPhoto,
+                                            gender = "Artist / Storyteller"
+                                        )
                                     },
                                     onReportPost = { post -> reportTargetPost = post },
                                     onBlockAuthor = { post ->
@@ -399,6 +413,7 @@ fun ArtmuseumAuthenticatedShell(
                                     activeTheme = activeTheme,
                                     followersList = followersList,
                                     followingList = followingList,
+                                    followingUserIds = followingUserIds,
                                     isGuest = isGuest,
                                     onSignInWithGoogle = triggerGoogleSignIn,
                                     onBackToHome = {
@@ -408,7 +423,7 @@ fun ArtmuseumAuthenticatedShell(
                                         viewModel.observeCommentsForPost(post.postId)
                                         currentDestination = ArtmuseumDestination.PostDetail(post.postId)
                                     },
-                                    onSaveProfileChanges = { name, bio, ageStr, gender, photo, banner, palette, notif, vis ->
+                                    onSaveProfileChanges = { name, bio, ageStr, gender, photo, banner, palette, notif, vis, hideAge, inviteCode ->
                                         viewModel.saveProfileChanges(
                                             displayName = name,
                                             bio = bio,
@@ -419,8 +434,17 @@ fun ArtmuseumAuthenticatedShell(
                                             themePalette = palette,
                                             notificationsEnabled = notif,
                                             profileVisibility = vis,
+                                            hideAge = hideAge,
+                                            inviteCode = inviteCode,
                                             onSaved = {}
                                         )
+                                    },
+                                    onToggleFollowUser = viewModel::toggleFollowUser,
+                                    onFindUserByInviteCode = viewModel::findUserByInviteCode,
+                                    onOpenDirectChat = { peerUid, peerName, peerPhoto ->
+                                        val chatId = if (peerUid.startsWith("chat_")) peerUid else "chat_${peerUid.take(16)}"
+                                        viewModel.openChat(chatId)
+                                        currentDestination = ArtmuseumDestination.DirectChat(peerUid, peerName, peerPhoto)
                                     },
                                     onUnblockUser = viewModel::unblockUser,
                                     onSignOut = {
@@ -482,6 +506,23 @@ fun ArtmuseumAuthenticatedShell(
                                     viewModel.openChat(chatId)
                                     currentDestination = ArtmuseumDestination.DirectChat(peerUid, peerName, peerPhoto)
                                 },
+                                onOpenCreatorProfile = { authorId, authorName, authorPhoto ->
+                                    val existing = publicUsers.firstOrNull { it.uid == authorId }
+                                    creatorProfileTarget = existing ?: UserProfile(
+                                        uid = authorId,
+                                        displayName = authorName,
+                                        photoURL = authorPhoto,
+                                        gender = "Artist / Storyteller"
+                                    )
+                                },
+                                isFollowingAuthor = post.authorId in followingUserIds,
+                                onToggleFollowAuthor = {
+                                    viewModel.toggleFollowUser(
+                                        post.authorId,
+                                        post.authorNameSnapshot,
+                                        post.authorPhotoSnapshot
+                                    )
+                                },
                                 onReportPost = { reportTargetPost = post },
                                 onDeletePost = {
                                     viewModel.deletePost(post.postId) {
@@ -501,13 +542,14 @@ fun ArtmuseumAuthenticatedShell(
                             onBack = {
                                 currentDestination = ArtmuseumDestination.MainTab(ArtmuseumTab.HOME)
                             },
-                            onPublish = { text, imageUrl, caption, topics, palette ->
+                            onPublish = { text, imageUrl, caption, topics, palette, aspectRatio ->
                                 viewModel.publishPost(
                                     text = text,
                                     imageURL = imageUrl,
                                     imageCaption = caption,
                                     topics = topics,
                                     themePalette = palette,
+                                    aspectRatio = aspectRatio,
                                     onSuccess = {
                                         currentDestination = ArtmuseumDestination.MainTab(ArtmuseumTab.HOME)
                                     }
@@ -546,12 +588,16 @@ fun ArtmuseumAuthenticatedShell(
                             peerName = dest.peerName,
                             peerPhoto = dest.peerPhoto,
                             messages = activeChatMessages,
-                            onSendMessage = { text ->
+                            onSendMessage = { text, attachmentUrl, attachmentType, fileName, fileSize ->
                                 viewModel.sendDirectMessage(
                                     peerUid = dest.peerUid,
                                     peerName = dest.peerName,
                                     peerPhoto = dest.peerPhoto,
-                                    text = text
+                                    text = text,
+                                    attachmentUrl = attachmentUrl,
+                                    attachmentType = attachmentType,
+                                    fileName = fileName,
+                                    fileSize = fileSize
                                 )
                             },
                             onBack = {
@@ -652,6 +698,33 @@ fun ArtmuseumAuthenticatedShell(
             GuestSignInPromptDialog(
                 onDismiss = { showGuestSignInDialog = false },
                 onSignInWithGoogle = triggerGoogleSignIn
+            )
+        }
+
+        if (creatorProfileTarget != null) {
+            val target = creatorProfileTarget!!
+            val isFollowingTarget = target.uid in followingUserIds
+            val creatorExhibits = allFeedPosts.filter { it.authorId == target.uid }
+            CreatorProfileSheet(
+                creator = target,
+                creatorPosts = creatorExhibits,
+                isFollowing = isFollowingTarget,
+                onToggleFollow = {
+                    viewModel.toggleFollowUser(target.uid, target.displayName, target.photoURL)
+                },
+                onMessageCreator = {
+                    val peerTarget = target
+                    creatorProfileTarget = null
+                    val chatId = if (peerTarget.uid.startsWith("chat_")) peerTarget.uid else "chat_${peerTarget.uid.take(16)}"
+                    viewModel.openChat(chatId)
+                    currentDestination = ArtmuseumDestination.DirectChat(peerTarget.uid, peerTarget.displayName, peerTarget.photoURL)
+                },
+                onOpenPostDetail = { post ->
+                    creatorProfileTarget = null
+                    viewModel.observeCommentsForPost(post.postId)
+                    currentDestination = ArtmuseumDestination.PostDetail(post.postId)
+                },
+                onDismiss = { creatorProfileTarget = null }
             )
         }
     }

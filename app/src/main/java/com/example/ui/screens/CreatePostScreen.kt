@@ -15,9 +15,11 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -95,7 +97,8 @@ fun CreatePostScreen(
         imageURL: String,
         imageCaption: String,
         topics: List<String>,
-        themePalette: ArtmuseumThemePalette
+        themePalette: ArtmuseumThemePalette,
+        aspectRatio: String
     ) -> Unit,
     onThemeChanged: (ArtmuseumThemePalette) -> Unit,
     onShowMessage: (String) -> Unit
@@ -108,6 +111,8 @@ fun CreatePostScreen(
     val scope = rememberCoroutineScope()
 
     var selectedImageSource by remember { mutableStateOf("preset:alpine_valley") }
+    var selectedAspectRatio by remember { mutableStateOf("1:1") }
+    var selectedImageSize by remember { mutableStateOf("standard") }
     var captionText by remember { mutableStateOf("") }
     var selectedTopics by remember { mutableStateOf(listOf("Life")) }
     var availableTopics by remember { mutableStateOf(ARTMUSEUM_TOPICS) }
@@ -212,7 +217,8 @@ fun CreatePostScreen(
                             selectedImageSource,
                             "",
                             selectedTopics,
-                            selectedPalette
+                            selectedPalette,
+                            if (selectedImageSize == "standard") selectedAspectRatio else "${selectedAspectRatio}_${selectedImageSize}"
                         )
                     },
                     enabled = !isSubmitting && !isEncodingImage,
@@ -247,12 +253,24 @@ fun CreatePostScreen(
 
             Spacer(modifier = Modifier.height(if (dimens.isCompact) 10.dp else 16.dp))
 
-            // Rounded Artwork Preview Card with circular X button at top-right (Matches Screen 4 of mockup)
+            // Rounded Artwork Preview Card with circular X button at top-right
             if (selectedImageSource.isNotBlank()) {
+                val ratioFloat = when (selectedAspectRatio) {
+                    "4:5" -> 4f / 5f
+                    "16:9" -> 16f / 9f
+                    "3:4" -> 3f / 4f
+                    else -> 1f
+                }
+                val previewMaxHeight = when (selectedImageSize) {
+                    "compact" -> 175.dp
+                    "large" -> 320.dp
+                    else -> if (dimens.isCompact) 230.dp else 260.dp
+                }
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(if (dimens.isCompact) 160.dp else 216.dp)
+                        .heightIn(max = previewMaxHeight)
+                        .aspectRatio(ratioFloat)
                         .clip(ArtmuseumShapeTokens.Card)
                 ) {
                     ArtmuseumArtworkImage(
@@ -293,6 +311,76 @@ fun CreatePostScreen(
                                 tint = WarmPaper,
                                 modifier = Modifier.size(15.dp)
                             )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Aspect Ratio Selector Chips
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    listOf("1:1" to "Square 1:1", "4:5" to "Portrait 4:5", "16:9" to "Cinema 16:9", "3:4" to "Classic 3:4").forEach { (key, label) ->
+                        val isSelected = selectedAspectRatio == key
+                        Surface(
+                            onClick = { selectedAspectRatio = key },
+                            shape = ArtmuseumShapeTokens.Pill,
+                            color = if (isSelected) colors.pillSelectedFill else colors.subtleSurface,
+                            border = BorderStroke(0.8.dp, if (isSelected) colors.pillSelectedFill else colors.border),
+                            modifier = Modifier.height(30.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(horizontal = 10.dp)) {
+                                Text(
+                                    text = label,
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontSize = 11.sp,
+                                        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                                        color = if (isSelected) colors.pillSelectedText else colors.inkPrimary
+                                    )
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Image Display Size Selector Chips
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = "Size:",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium
+                        ),
+                        color = colors.mutedText
+                    )
+                    listOf("compact" to "Compact", "standard" to "Standard", "large" to "Full Frame").forEach { (key, label) ->
+                        val isSelected = selectedImageSize == key
+                        Surface(
+                            onClick = { selectedImageSize = key },
+                            shape = ArtmuseumShapeTokens.Pill,
+                            color = if (isSelected) colors.pillSelectedFill else colors.subtleSurface,
+                            border = BorderStroke(0.8.dp, if (isSelected) colors.pillSelectedFill else colors.border),
+                            modifier = Modifier.height(28.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(horizontal = 10.dp)) {
+                                Text(
+                                    text = label,
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontSize = 11.sp,
+                                        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                                        color = if (isSelected) colors.pillSelectedText else colors.inkPrimary
+                                    )
+                                )
+                            }
                         }
                     }
                 }

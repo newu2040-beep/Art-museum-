@@ -143,10 +143,13 @@ data class UserProfile(
     val followerCount: Int = 0,
     val followingCount: Int = 0,
     val isVerified: Boolean = true,
+    val inviteCode: String = "",
+    val hideAge: Boolean = false,
     @ServerTimestamp val createdAt: Timestamp? = null,
     @ServerTimestamp val updatedAt: Timestamp? = null
 ) {
     fun toCreateMap(): Map<String, Any> {
+        val code = if (inviteCode.isNotBlank()) inviteCode.trim().take(32) else generateDefaultInviteCode(uid)
         return mapOf<String, Any?>(
             "uid" to uid,
             "displayName" to displayName.trim().take(60),
@@ -163,16 +166,26 @@ data class UserProfile(
             "followerCount" to followerCount.coerceAtLeast(0),
             "followingCount" to followingCount.coerceAtLeast(0),
             "isVerified" to isVerified,
+            "inviteCode" to code,
+            "hideAge" to hideAge,
             "createdAt" to FieldValue.serverTimestamp(),
             "updatedAt" to FieldValue.serverTimestamp()
         ).filterValues { it != null } as Map<String, Any>
     }
 
     companion object {
+        fun generateDefaultInviteCode(uid: String): String {
+            val clean = uid.filter { it.isLetterOrDigit() }.uppercase()
+            val code = if (clean.length >= 6) clean.take(6) else (clean + "MUSEUM").take(6)
+            return "ART-$code"
+        }
+
         fun fromSnapshot(doc: DocumentSnapshot): UserProfile? {
             if (!doc.exists()) return null
             val uid = doc.getString("uid") ?: doc.id
             val displayName = doc.getString("displayName") ?: "Museum Member"
+            val storedCode = doc.getString("inviteCode")
+            val code = if (!storedCode.isNullOrBlank()) storedCode else generateDefaultInviteCode(uid)
             return UserProfile(
                 documentId = doc.id,
                 uid = uid,
@@ -190,6 +203,8 @@ data class UserProfile(
                 followerCount = (doc.getLong("followerCount") ?: 0L).toInt(),
                 followingCount = (doc.getLong("followingCount") ?: 0L).toInt(),
                 isVerified = doc.getBoolean("isVerified") ?: true,
+                inviteCode = code,
+                hideAge = doc.getBoolean("hideAge") ?: false,
                 createdAt = doc.getTimestamp("createdAt", DocumentSnapshot.ServerTimestampBehavior.ESTIMATE),
                 updatedAt = doc.getTimestamp("updatedAt", DocumentSnapshot.ServerTimestampBehavior.ESTIMATE)
             )
@@ -240,6 +255,7 @@ data class Post(
     val commentCount: Int = 0,
     val visibility: String = "public",
     val status: String = "active",
+    val aspectRatio: String = "1:1",
     @ServerTimestamp val createdAt: Timestamp? = null,
     @ServerTimestamp val updatedAt: Timestamp? = null
 ) {
@@ -262,6 +278,7 @@ data class Post(
             "commentCount" to 0,
             "visibility" to if (visibility == "private") "private" else "public",
             "status" to "active",
+            "aspectRatio" to aspectRatio,
             "createdAt" to FieldValue.serverTimestamp(),
             "updatedAt" to FieldValue.serverTimestamp()
         ).filterValues { it != null } as Map<String, Any>
@@ -289,6 +306,7 @@ data class Post(
                 commentCount = (doc.getLong("commentCount") ?: 0L).toInt(),
                 visibility = doc.getString("visibility") ?: "public",
                 status = doc.getString("status") ?: "active",
+                aspectRatio = doc.getString("aspectRatio") ?: "1:1",
                 createdAt = doc.getTimestamp("createdAt", DocumentSnapshot.ServerTimestampBehavior.ESTIMATE),
                 updatedAt = doc.getTimestamp("updatedAt", DocumentSnapshot.ServerTimestampBehavior.ESTIMATE)
             )
@@ -413,6 +431,10 @@ data class DirectChatMessage(
     val senderUid: String = "",
     val receiverUid: String = "",
     val text: String = "",
+    val attachmentUrl: String = "",
+    val attachmentType: String = "", // "image", "file", or ""
+    val fileName: String = "",
+    val fileSize: String = "",
     val timestamp: Long = System.currentTimeMillis(),
     val isFromMe: Boolean = false,
     val formattedTime: String = "12:00 PM"

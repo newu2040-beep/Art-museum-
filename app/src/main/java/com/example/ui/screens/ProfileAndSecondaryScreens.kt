@@ -1,16 +1,24 @@
 package com.example.ui.screens
 
 import android.Manifest
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.core.content.ContextCompat
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -41,14 +49,21 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.outlined.CameraAlt
+import androidx.compose.material.icons.outlined.ChatBubbleOutline
+import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.NotificationsActive
+import androidx.compose.material.icons.outlined.PersonAdd
+import androidx.compose.material.icons.outlined.QrCode
+import androidx.compose.material.icons.outlined.Share
+import com.example.util.ArtmuseumNotificationHelper
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
@@ -74,6 +89,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.R
@@ -116,6 +132,7 @@ fun ProfileScreen(
     activeTheme: ArtmuseumThemePalette,
     followersList: List<UserFollow> = emptyList(),
     followingList: List<UserFollow> = emptyList(),
+    followingUserIds: Set<String> = emptySet(),
     isGuest: Boolean = false,
     onSignInWithGoogle: () -> Unit = {},
     onBackToHome: () -> Unit,
@@ -129,8 +146,13 @@ fun ProfileScreen(
         bannerURL: String,
         themePalette: ArtmuseumThemePalette,
         notificationsEnabled: Boolean,
-        profileVisibility: String
+        profileVisibility: String,
+        hideAge: Boolean,
+        inviteCode: String
     ) -> Unit,
+    onToggleFollowUser: (targetUid: String, targetName: String, targetPhotoURL: String) -> Unit = { _, _, _ -> },
+    onFindUserByInviteCode: suspend (String) -> UserProfile? = { null },
+    onOpenDirectChat: (peerUid: String, peerName: String, peerPhoto: String) -> Unit = { _, _, _ -> },
     onUnblockUser: (String) -> Unit,
     onSignOut: () -> Unit,
     onDeleteAccount: () -> Unit,
@@ -162,6 +184,8 @@ fun ProfileScreen(
     var showDeleteAccountDialog by remember { mutableStateOf(false) }
     var showBlockedUsersSheet by remember { mutableStateOf(false) }
     var showFollowListSheet by remember { mutableStateOf<String?>(null) } // "followers" or "following"
+    var showQRCodeDialog by remember { mutableStateOf(false) }
+    var showConnectDialog by remember { mutableStateOf(false) }
 
     // Avatar photo picker
     val avatarPickerLauncher = rememberLauncherForActivityResult(
@@ -180,7 +204,9 @@ fun ProfileScreen(
                         currentProfile.bannerURL.ifBlank { "preset:profile_header" },
                         activeTheme,
                         currentProfile.notificationsEnabled,
-                        currentProfile.profileVisibility
+                        currentProfile.profileVisibility,
+                        currentProfile.hideAge,
+                        currentProfile.inviteCode
                     )
                     onShowMessage("Profile photo updated")
                 }
@@ -205,7 +231,9 @@ fun ProfileScreen(
                         dataUri,
                         activeTheme,
                         currentProfile.notificationsEnabled,
-                        currentProfile.profileVisibility
+                        currentProfile.profileVisibility,
+                        currentProfile.hideAge,
+                        currentProfile.inviteCode
                     )
                     onShowMessage("Museum banner updated")
                 }
@@ -322,6 +350,36 @@ fun ProfileScreen(
                             onClick = {
                                 showSettingsMenu = false
                                 showEditProfileSheet = true
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Museum QR Code") },
+                            leadingIcon = { Icon(Icons.Outlined.QrCode, null) },
+                            onClick = {
+                                showSettingsMenu = false
+                                showQRCodeDialog = true
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Connect by Invite ID") },
+                            leadingIcon = { Icon(Icons.Outlined.PersonAdd, null) },
+                            onClick = {
+                                showSettingsMenu = false
+                                showConnectDialog = true
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Test Push Notification") },
+                            leadingIcon = { Icon(Icons.Outlined.NotificationsActive, null) },
+                            onClick = {
+                                showSettingsMenu = false
+                                ArtmuseumNotificationHelper.sendNotification(
+                                    context = context,
+                                    title = "Museum Activity",
+                                    message = "Sophia just liked your recent exhibit reflection! ✨",
+                                    notificationId = 1002
+                                )
+                                onShowMessage("Test push notification sent!")
                             }
                         )
                         DropdownMenuItem(
@@ -444,19 +502,110 @@ fun ProfileScreen(
 
                 Spacer(modifier = Modifier.height(4.dp))
 
-                // Age · Gender
+                // Age · Gender (respects hideAge)
+                val profileSubtitle = remember(currentProfile.hideAge, currentProfile.age, currentProfile.gender) {
+                    if (!currentProfile.hideAge && currentProfile.age > 0) {
+                        if (currentProfile.gender.isNotBlank()) "${currentProfile.age} · ${currentProfile.gender}" else "${currentProfile.age}"
+                    } else {
+                        currentProfile.gender.ifBlank { "Curator" }
+                    }
+                }
                 Text(
-                    text = "${currentProfile.age} · ${currentProfile.gender}",
+                    text = profileSubtitle,
                     style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.5.sp),
                     color = colors.mutedText
                 )
 
-                Spacer(modifier = Modifier.height(12.dp))
+                // Unique Invite ID & QR Code Action Pills
+                val resolvedInviteCode = remember(currentProfile.inviteCode, currentProfile.uid) {
+                    currentProfile.inviteCode.ifBlank { UserProfile.generateDefaultInviteCode(currentProfile.uid) }
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Surface(
+                        shape = ArtmuseumShapeTokens.Pill,
+                        color = colors.subtleSurface,
+                        border = BorderStroke(0.8.dp, colors.border),
+                        modifier = Modifier.testTag("profile_invite_id_badge")
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(start = 12.dp, end = 6.dp, top = 4.dp, bottom = 4.dp)
+                        ) {
+                            Text(
+                                text = "ID: $resolvedInviteCode",
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontWeight = FontWeight.SemiBold,
+                                    fontSize = 12.sp
+                                ),
+                                color = colors.inkPrimary
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            IconButton(
+                                onClick = {
+                                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                                    val clip = ClipData.newPlainText("Artmuseum Invite ID", resolvedInviteCode)
+                                    clipboard?.setPrimaryClip(clip)
+                                    onShowMessage("Invite ID copied: $resolvedInviteCode")
+                                },
+                                modifier = Modifier
+                                    .size(24.dp)
+                                    .testTag("copy_invite_code_button")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Outlined.ContentCopy,
+                                    contentDescription = "Copy invite code",
+                                    tint = colors.pillSelectedFill,
+                                    modifier = Modifier.size(13.dp)
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.width(8.dp))
+
+                    Surface(
+                        onClick = { showQRCodeDialog = true },
+                        shape = ArtmuseumShapeTokens.Pill,
+                        color = colors.subtleSurface,
+                        border = BorderStroke(0.8.dp, colors.border),
+                        modifier = Modifier
+                            .height(32.dp)
+                            .testTag("profile_qr_code_button")
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 10.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.QrCode,
+                                contentDescription = "QR Code",
+                                tint = colors.inkPrimary,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "QR Code",
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontWeight = FontWeight.Medium,
+                                    fontSize = 11.5.sp
+                                ),
+                                color = colors.inkPrimary
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
 
                 // Bio
                 Text(
                     text = currentProfile.bio.ifBlank {
-                        "Just a girl who finds beauty in meaningful conversations, art, nature and real connections. \uD83C\uDF3F"
+                        "Just a girl who finds beauty in meaningful conversations, art, nature and real connections. 🌿"
                     },
                     style = MaterialTheme.typography.bodyMedium.copy(
                         fontSize = 14.sp,
@@ -543,23 +692,44 @@ fun ProfileScreen(
                     }
                 }
 
-                // Pill Outline Button: [✏️ Edit Profile]
-                ArtmuseumSecondaryButton(
-                    text = "Edit Profile",
-                    onClick = { showEditProfileSheet = true },
-                    leadingContent = {
-                        Icon(
-                            imageVector = Icons.Outlined.Edit,
-                            contentDescription = null,
-                            tint = colors.inkPrimary,
-                            modifier = Modifier.size(16.dp)
-                        )
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(44.dp),
-                    testTag = "edit_profile_button"
-                )
+                // Action Buttons Row: [✏️ Edit Profile] [👥 Connect with ID]
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    ArtmuseumSecondaryButton(
+                        text = "Edit Profile",
+                        onClick = { showEditProfileSheet = true },
+                        leadingContent = {
+                            Icon(
+                                imageVector = Icons.Outlined.Edit,
+                                contentDescription = null,
+                                tint = colors.inkPrimary,
+                                modifier = Modifier.size(15.dp)
+                            )
+                        },
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(44.dp),
+                        testTag = "edit_profile_button"
+                    )
+                    ArtmuseumSecondaryButton(
+                        text = "Connect ID",
+                        onClick = { showConnectDialog = true },
+                        leadingContent = {
+                            Icon(
+                                imageVector = Icons.Outlined.PersonAdd,
+                                contentDescription = null,
+                                tint = colors.inkPrimary,
+                                modifier = Modifier.size(15.dp)
+                            )
+                        },
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(44.dp),
+                        testTag = "connect_by_id_button"
+                    )
+                }
 
                 Spacer(modifier = Modifier.height(16.dp))
 
@@ -637,8 +807,20 @@ fun ProfileScreen(
             profile = currentProfile,
             activeTheme = activeTheme,
             onDismiss = { showEditProfileSheet = false },
-            onSave = { name, bio, ageStr, gender, photo, palette, notif, vis ->
-                onSaveProfileChanges(name, bio, ageStr, gender, photo, currentProfile.bannerURL, palette, notif, vis)
+            onSave = { name, bio, ageStr, gender, photo, palette, notif, vis, hideAge, inviteCode ->
+                onSaveProfileChanges(
+                    name,
+                    bio,
+                    ageStr,
+                    gender,
+                    photo,
+                    currentProfile.bannerURL,
+                    palette,
+                    notif,
+                    vis,
+                    hideAge,
+                    inviteCode
+                )
                 showEditProfileSheet = false
             },
             onSignOut = {
@@ -649,14 +831,44 @@ fun ProfileScreen(
         )
     }
 
+    if (showQRCodeDialog) {
+        ArtmuseumQRCodeDialog(
+            user = currentProfile,
+            onDismiss = { showQRCodeDialog = false },
+            onShare = {
+                val sendIntent = Intent(Intent.ACTION_SEND).apply {
+                    type = "text/plain"
+                    putExtra(
+                        Intent.EXTRA_TEXT,
+                        "Connect with me on Artmuseum! My Invite ID is: ${currentProfile.inviteCode.ifBlank { UserProfile.generateDefaultInviteCode(currentProfile.uid) }}\nLet's share quiet reflections and museum exhibits together. ✨"
+                    )
+                }
+                context.startActivity(Intent.createChooser(sendIntent, "Share Museum Pass"))
+            }
+        )
+    }
+
+    if (showConnectDialog) {
+        ConnectByInviteCodeDialog(
+            onFindUser = onFindUserByInviteCode,
+            isFollowing = { targetUid -> targetUid in followingUserIds },
+            onToggleFollow = onToggleFollowUser,
+            onMessageUser = { uid, name, photo ->
+                showConnectDialog = false
+                onOpenDirectChat(uid, name, photo)
+            },
+            onDismiss = { showConnectDialog = false }
+        )
+    }
+
     if (showFollowListSheet != null) {
         val sheetTitle = if (showFollowListSheet == "followers") "Followers" else "Following"
         val userList = if (showFollowListSheet == "followers") followersList else followingList
         FollowersFollowingSheet(
             title = sheetTitle,
             users = userList,
-            followingUserIds = emptySet(),
-            onToggleFollow = { _, _, _ -> },
+            followingUserIds = followingUserIds,
+            onToggleFollow = onToggleFollowUser,
             onDismiss = { showFollowListSheet = null }
         )
     }
@@ -883,15 +1095,22 @@ fun EditProfileModalSheet(
         photoURL: String,
         themePalette: ArtmuseumThemePalette,
         notificationsEnabled: Boolean,
-        profileVisibility: String
+        profileVisibility: String,
+        hideAge: Boolean,
+        inviteCode: String
     ) -> Unit,
     onSignOut: () -> Unit,
     onRequestNotificationPermission: (String) -> Unit
 ) {
     val colors = LocalArtmuseumColors.current
+    val context = LocalContext.current
     var displayName by remember { mutableStateOf(profile.displayName) }
     var bio by remember { mutableStateOf(profile.bio) }
     var ageInput by remember { mutableStateOf(profile.age.toString()) }
+    var hideAge by remember { mutableStateOf(profile.hideAge) }
+    var inviteCode by remember {
+        mutableStateOf(profile.inviteCode.ifBlank { UserProfile.generateDefaultInviteCode(profile.uid) })
+    }
     var gender by remember { mutableStateOf(if (profile.gender == "Male") "Male" else "Female") }
     var selectedPalette by remember { mutableStateOf(activeTheme) }
     var notificationsEnabled by remember { mutableStateOf(profile.notificationsEnabled) }
@@ -948,6 +1167,49 @@ fun EditProfileModalSheet(
                 modifier = Modifier
                     .fillMaxWidth()
                     .testTag("edit_age_input")
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Hide Age Toggle
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Hide Age on Profile",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = colors.inkPrimary
+                    )
+                    Text(
+                        text = "Keep age private from your public profile and exhibit cards",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = colors.mutedText
+                    )
+                }
+                Switch(
+                    checked = hideAge,
+                    onCheckedChange = { hideAge = it },
+                    modifier = Modifier.testTag("edit_hide_age_switch")
+                )
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Unique Invite ID
+            OutlinedTextField(
+                value = inviteCode,
+                onValueChange = { input ->
+                    inviteCode = input.uppercase(Locale.ROOT).filter { it.isLetterOrDigit() || it == '-' }.take(24)
+                },
+                label = { Text("Unique Invite ID (e.g. ART-XXXXXX)") },
+                singleLine = true,
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("edit_invite_code_input")
             )
 
             Spacer(modifier = Modifier.height(12.dp))
@@ -1082,6 +1344,56 @@ fun EditProfileModalSheet(
                 )
             }
 
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Test Push Notification Button
+            Surface(
+                onClick = {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                        ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+                    ) {
+                        notifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    } else {
+                        ArtmuseumNotificationHelper.sendNotification(
+                            context = context,
+                            title = "Museum Activity",
+                            message = "Sophia just liked your recent exhibit reflection! ✨",
+                            notificationId = 1002
+                        )
+                        onRequestNotificationPermission("Test push notification sent!")
+                    }
+                },
+                shape = ArtmuseumShapeTokens.Pill,
+                color = colors.subtleSurface,
+                border = BorderStroke(0.8.dp, colors.border),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(42.dp)
+                    .testTag("test_push_notification_button")
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center,
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.NotificationsActive,
+                        contentDescription = null,
+                        tint = colors.pillSelectedFill,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Test Push Notification",
+                        style = MaterialTheme.typography.labelMedium.copy(
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 13.sp
+                        ),
+                        color = colors.inkPrimary
+                    )
+                }
+            }
+
             Spacer(modifier = Modifier.height(18.dp))
 
             ArtmuseumPrimaryButton(
@@ -1095,7 +1407,9 @@ fun EditProfileModalSheet(
                         profile.photoURL,
                         selectedPalette,
                         notificationsEnabled,
-                        profileVisibility
+                        profileVisibility,
+                        hideAge,
+                        inviteCode
                     )
                 },
                 modifier = Modifier.fillMaxWidth(),
@@ -1487,6 +1801,557 @@ fun NotificationsBottomSheet(
                 }
             }
             Spacer(modifier = Modifier.height(16.dp))
+        }
+    }
+}
+
+@Composable
+fun ArtmuseumQRCodeDialog(
+    user: UserProfile,
+    onDismiss: () -> Unit,
+    onShare: () -> Unit
+) {
+    val colors = LocalArtmuseumColors.current
+    val context = LocalContext.current
+    val inviteCode = remember(user.inviteCode, user.uid) {
+        user.inviteCode.ifBlank { UserProfile.generateDefaultInviteCode(user.uid) }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = colors.cardSurface,
+        shape = RoundedCornerShape(24.dp),
+        title = {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                ArtmuseumOliveEmblem(size = 28.dp, showCircleMedallion = true)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "Museum Pass & QR",
+                    style = MaterialTheme.typography.titleLarge.copy(
+                        fontFamily = PlayfairDisplayFontFamily,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 20.sp
+                    ),
+                    color = colors.inkPrimary
+                )
+            }
+        },
+        text = {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+            ) {
+                Text(
+                    text = "Scan or share your unique curator code to connect and follow each other instantly.",
+                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.5.sp),
+                    color = colors.mutedText,
+                    textAlign = TextAlign.Center
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Canvas QR Code Card
+                Surface(
+                    shape = RoundedCornerShape(20.dp),
+                    color = WarmPaper,
+                    border = BorderStroke(1.dp, colors.border.copy(alpha = 0.8f)),
+                    shadowElevation = 2.dp,
+                    modifier = Modifier.size(200.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                        val qrSeed = remember(inviteCode) { (inviteCode + user.uid).hashCode() }
+                        Canvas(modifier = Modifier.size(160.dp)) {
+                            val w = size.width
+                            val h = size.height
+                            val cols = 15
+                            val rows = 15
+                            val cellW = w / cols
+                            val cellH = h / rows
+                            val darkColor = Color(0xFF2C2824)
+
+                            fun drawFinder(startX: Float, startY: Float) {
+                                drawRect(
+                                    color = darkColor,
+                                    topLeft = androidx.compose.ui.geometry.Offset(startX, startY),
+                                    size = androidx.compose.ui.geometry.Size(cellW * 7, cellH * 7)
+                                )
+                                drawRect(
+                                    color = WarmPaper,
+                                    topLeft = androidx.compose.ui.geometry.Offset(startX + cellW, startY + cellH),
+                                    size = androidx.compose.ui.geometry.Size(cellW * 5, cellH * 5)
+                                )
+                                drawRect(
+                                    color = darkColor,
+                                    topLeft = androidx.compose.ui.geometry.Offset(startX + cellW * 2, startY + cellH * 2),
+                                    size = androidx.compose.ui.geometry.Size(cellW * 3, cellH * 3)
+                                )
+                            }
+
+                            drawFinder(0f, 0f)
+                            drawFinder(cellW * 8, 0f)
+                            drawFinder(0f, cellH * 8)
+
+                            val rng = java.util.Random(qrSeed.toLong())
+                            for (r in 0 until rows) {
+                                for (c in 0 until cols) {
+                                    val inTopLeft = r < 7 && c < 7
+                                    val inTopRight = r < 7 && c >= 8
+                                    val inBottomLeft = r >= 8 && c < 7
+                                    val inCenter = r in 6..8 && c in 6..8
+                                    if (!inTopLeft && !inTopRight && !inBottomLeft && !inCenter) {
+                                        if (rng.nextBoolean()) {
+                                            drawRoundRect(
+                                                color = darkColor,
+                                                topLeft = androidx.compose.ui.geometry.Offset(c * cellW + cellW * 0.12f, r * cellH + cellH * 0.12f),
+                                                size = androidx.compose.ui.geometry.Size(cellW * 0.76f, cellH * 0.76f),
+                                                cornerRadius = androidx.compose.ui.geometry.CornerRadius(cellW * 0.2f, cellH * 0.2f)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        Surface(
+                            shape = CircleShape,
+                            color = WarmPaper,
+                            border = BorderStroke(1.2.dp, Color(0xFFC5A880)),
+                            shadowElevation = 2.dp,
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                ArtmuseumOliveEmblem(size = 20.dp, showCircleMedallion = false)
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    ArtmuseumAvatar(
+                        photoURL = user.photoURL,
+                        contentDescription = user.displayName,
+                        size = 28.dp
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = user.displayName,
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 15.sp
+                        ),
+                        color = colors.inkPrimary
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                Surface(
+                    shape = ArtmuseumShapeTokens.Pill,
+                    color = colors.subtleSurface,
+                    border = BorderStroke(0.8.dp, colors.border),
+                    modifier = Modifier.clickable {
+                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                        val clip = ClipData.newPlainText("Artmuseum Invite ID", inviteCode)
+                        clipboard?.setPrimaryClip(clip)
+                    }
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
+                    ) {
+                        Text(
+                            text = inviteCode,
+                            style = MaterialTheme.typography.labelMedium.copy(
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp,
+                                letterSpacing = 1.sp
+                            ),
+                            color = colors.pillSelectedFill
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Icon(
+                            imageVector = Icons.Outlined.ContentCopy,
+                            contentDescription = "Copy",
+                            tint = colors.pillSelectedFill,
+                            modifier = Modifier.size(14.dp)
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            ArtmuseumPrimaryButton(
+                text = "Share Pass",
+                onClick = onShare,
+                leadingContent = {
+                    Icon(
+                        imageVector = Icons.Outlined.Share,
+                        contentDescription = null,
+                        tint = colors.pillSelectedText,
+                        modifier = Modifier.size(16.dp)
+                    )
+                },
+                modifier = Modifier.fillMaxWidth().height(44.dp)
+            )
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) {
+                Text("Close", color = colors.mutedText)
+            }
+        }
+    )
+}
+
+@Composable
+fun ConnectByInviteCodeDialog(
+    onFindUser: suspend (String) -> UserProfile?,
+    isFollowing: (String) -> Boolean,
+    onToggleFollow: (targetUid: String, targetName: String, targetPhotoURL: String) -> Unit,
+    onMessageUser: (peerUid: String, peerName: String, peerPhoto: String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val colors = LocalArtmuseumColors.current
+    val scope = rememberCoroutineScope()
+    var inputCode by remember { mutableStateOf("") }
+    var isSearching by remember { mutableStateOf(false) }
+    var searchedUser by remember { mutableStateOf<UserProfile?>(null) }
+    var searchError by remember { mutableStateOf<String?>(null) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = colors.cardSurface,
+        shape = RoundedCornerShape(22.dp),
+        title = {
+            Text(
+                text = "Connect via Invite ID",
+                style = MaterialTheme.typography.titleLarge.copy(
+                    fontFamily = PlayfairDisplayFontFamily,
+                    fontWeight = FontWeight.Bold
+                ),
+                color = colors.inkPrimary
+            )
+        },
+        text = {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = "Enter another curator's unique invite code (e.g. ART-XXXXXX) to follow their exhibits and start a reflection.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.mutedText
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+
+                OutlinedTextField(
+                    value = inputCode,
+                    onValueChange = { input ->
+                        inputCode = input.uppercase(Locale.ROOT).filter { it.isLetterOrDigit() || it == '-' }.take(24)
+                        searchError = null
+                    },
+                    label = { Text("Invite ID Code") },
+                    placeholder = { Text("ART-ELENA9") },
+                    singleLine = true,
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier.fillMaxWidth().testTag("connect_invite_input")
+                )
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                ArtmuseumSecondaryButton(
+                    text = if (isSearching) "Searching..." else "Search Curator",
+                    onClick = {
+                        val trimmed = inputCode.trim()
+                        if (trimmed.isNotBlank()) {
+                            scope.launch {
+                                isSearching = true
+                                searchError = null
+                                searchedUser = null
+                                val user = onFindUser(trimmed)
+                                isSearching = false
+                                if (user != null) {
+                                    searchedUser = user
+                                } else {
+                                    searchError = "No curator found with code \"$trimmed\". Check the code and try again."
+                                }
+                            }
+                        }
+                    },
+                    enabled = inputCode.isNotBlank() && !isSearching,
+                    modifier = Modifier.fillMaxWidth().height(42.dp),
+                    testTag = "search_invite_code_button"
+                )
+
+                if (searchError != null) {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(
+                        text = searchError ?: "",
+                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
+                        color = Color(0xFFC0392B),
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+
+                if (searchedUser != null) {
+                    val user = searchedUser!!
+                    val following = isFollowing(user.uid)
+                    Spacer(modifier = Modifier.height(14.dp))
+                    Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = colors.subtleSurface,
+                        border = BorderStroke(0.8.dp, colors.border),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(14.dp)) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                ArtmuseumAvatar(
+                                    photoURL = user.photoURL,
+                                    contentDescription = user.displayName,
+                                    size = 46.dp
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(
+                                            text = user.displayName,
+                                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                            color = colors.inkPrimary
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        VerifiedMuseumBadge()
+                                    }
+                                    val userSubtitle = if (!user.hideAge && user.age > 0) "${user.age} · ${user.gender}" else user.gender.ifBlank { "Curator" }
+                                    Text(
+                                        text = userSubtitle,
+                                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.5.sp),
+                                        color = colors.mutedText
+                                    )
+                                }
+                            }
+
+                            if (user.bio.isNotBlank()) {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    text = user.bio,
+                                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.5.sp),
+                                    color = colors.inkPrimary.copy(alpha = 0.85f),
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                ArtmuseumPrimaryButton(
+                                    text = if (following) "Following" else "Follow",
+                                    onClick = {
+                                        onToggleFollow(user.uid, user.displayName, user.photoURL)
+                                    },
+                                    modifier = Modifier.weight(1f).height(40.dp),
+                                    testTag = "connect_follow_toggle_button"
+                                )
+                                ArtmuseumSecondaryButton(
+                                    text = "Message",
+                                    onClick = {
+                                        onMessageUser(user.uid, user.displayName, user.photoURL)
+                                    },
+                                    modifier = Modifier.weight(1f).height(40.dp),
+                                    testTag = "connect_message_button"
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Done", color = colors.inkPrimary)
+            }
+        }
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun CreatorProfileSheet(
+    creator: UserProfile,
+    creatorPosts: List<Post>,
+    isFollowing: Boolean,
+    onToggleFollow: () -> Unit,
+    onMessageCreator: () -> Unit,
+    onOpenPostDetail: (Post) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val colors = LocalArtmuseumColors.current
+    val context = LocalContext.current
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = colors.cardSurface,
+        shape = ArtmuseumShapeTokens.LargeSheetTop
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 22.dp, vertical = 12.dp)
+        ) {
+            // Header Row: Avatar + Name + Subtitle
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                ArtmuseumAvatar(
+                    photoURL = creator.photoURL,
+                    contentDescription = creator.displayName,
+                    size = 56.dp
+                )
+                Spacer(modifier = Modifier.width(14.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = creator.displayName,
+                            style = MaterialTheme.typography.titleLarge.copy(
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 19.sp
+                            ),
+                            color = colors.inkPrimary
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        VerifiedMuseumBadge()
+                    }
+                    val subtitle = if (!creator.hideAge && creator.age > 0) {
+                        "${creator.age} · ${creator.gender}"
+                    } else {
+                        creator.gender.ifBlank { "Curator" }
+                    }
+                    Text(
+                        text = subtitle,
+                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
+                        color = colors.mutedText
+                    )
+                    val creatorCode = creator.inviteCode.ifBlank { UserProfile.generateDefaultInviteCode(creator.uid) }
+                    Text(
+                        text = "ID: $creatorCode",
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp, fontWeight = FontWeight.SemiBold),
+                        color = colors.pillSelectedFill,
+                        modifier = Modifier.clickable {
+                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                            val clip = ClipData.newPlainText("Artmuseum Invite ID", creatorCode)
+                            clipboard?.setPrimaryClip(clip)
+                        }
+                    )
+                }
+            }
+
+            if (creator.bio.isNotBlank()) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = creator.bio,
+                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.5.sp, lineHeight = 20.sp),
+                    color = colors.inkPrimary.copy(alpha = 0.90f)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Action Buttons: [Follow / Following] [Message]
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                ArtmuseumPrimaryButton(
+                    text = if (isFollowing) "Following" else "Follow",
+                    onClick = onToggleFollow,
+                    modifier = Modifier.weight(1f).height(44.dp),
+                    testTag = "creator_profile_follow_button"
+                )
+                ArtmuseumSecondaryButton(
+                    text = "Message",
+                    onClick = {
+                        onDismiss()
+                        onMessageCreator()
+                    },
+                    leadingContent = {
+                        Icon(
+                            imageVector = Icons.Outlined.ChatBubbleOutline,
+                            contentDescription = null,
+                            tint = colors.inkPrimary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    },
+                    modifier = Modifier.weight(1f).height(44.dp),
+                    testTag = "creator_profile_message_button"
+                )
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            Text(
+                text = "Exhibits (${creatorPosts.size})",
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                color = colors.inkPrimary
+            )
+            Spacer(modifier = Modifier.height(10.dp))
+
+            if (creatorPosts.isEmpty()) {
+                Text(
+                    text = "No exhibits published yet.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.mutedText,
+                    modifier = Modifier.padding(vertical = 12.dp)
+                )
+            } else {
+                val rows = creatorPosts.chunked(2)
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    rows.forEach { rowPosts ->
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            rowPosts.forEach { post ->
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(120.dp)
+                                        .clip(RoundedCornerShape(14.dp))
+                                        .clickable {
+                                            onDismiss()
+                                            onOpenPostDetail(post)
+                                        }
+                                ) {
+                                    ArtmuseumArtworkImage(
+                                        imageSource = post.imageURL.ifBlank { "preset:coastal_villa" },
+                                        contentDescription = post.text.take(30),
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentScale = ContentScale.Crop
+                                    )
+                                }
+                            }
+                            if (rowPosts.size == 1) {
+                                Spacer(modifier = Modifier.weight(1f))
+                            }
+                        }
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(20.dp))
         }
     }
 }

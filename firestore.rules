@@ -34,7 +34,7 @@ service cloud.firestore {
           'uid', 'displayName', 'photoURL', 'bannerURL', 'bio', 'age', 'gender',
           'themePreference', 'notificationsEnabled', 'profileVisibility',
           'accountStatus', 'postCount', 'followerCount', 'followingCount',
-          'isVerified', 'createdAt', 'updatedAt'
+          'isVerified', 'inviteCode', 'hideAge', 'createdAt', 'updatedAt'
         ]) &&
         data.uid is string && data.uid.size() >= 1 && data.uid.size() <= 128 &&
         data.uid == userId && data.uid == request.auth.uid &&
@@ -52,6 +52,8 @@ service cloud.firestore {
         (!('followerCount' in data) || data.followerCount == null || (data.followerCount is int && data.followerCount >= 0)) &&
         (!('followingCount' in data) || data.followingCount == null || (data.followingCount is int && data.followingCount >= 0)) &&
         (!('isVerified' in data) || data.isVerified == null || data.isVerified is bool) &&
+        (!('inviteCode' in data) || data.inviteCode == null || (data.inviteCode is string && data.inviteCode.size() <= 64)) &&
+        (!('hideAge' in data) || data.hideAge == null || data.hideAge is bool) &&
         (!('createdAt' in data) || data.createdAt == null || data.createdAt is timestamp) &&
         (!('updatedAt' in data) || data.updatedAt == null || data.updatedAt is timestamp);
     }
@@ -66,7 +68,7 @@ service cloud.firestore {
           'postId', 'authorId', 'authorNameSnapshot', 'authorPhotoSnapshot',
           'authorAgeSnapshot', 'authorGenderSnapshot', 'text', 'imageURL',
           'imageStoragePath', 'imageCaption', 'topics', 'themeName',
-          'likeCount', 'commentCount', 'visibility', 'status', 'createdAt', 'updatedAt'
+          'likeCount', 'commentCount', 'visibility', 'status', 'aspectRatio', 'createdAt', 'updatedAt'
         ]) &&
         data.postId is string && data.postId.size() >= 1 && data.postId.size() <= 128 && data.postId == postId &&
         data.authorId is string && data.authorId.size() >= 1 && data.authorId.size() <= 128 &&
@@ -85,6 +87,7 @@ service cloud.firestore {
         data.commentCount is int && data.commentCount >= 0 &&
         data.visibility is string && data.visibility.size() <= 10 && data.visibility in ['public', 'private'] &&
         data.status is string && data.status.size() <= 10 && data.status in ['active', 'archived'] &&
+        (!('aspectRatio' in data) || data.aspectRatio == null || (data.aspectRatio is string && data.aspectRatio.size() <= 20)) &&
         data.createdAt is timestamp && data.createdAt <= request.time &&
         (!('updatedAt' in data) || data.updatedAt == null || (data.updatedAt is timestamp && data.updatedAt <= request.time));
     }
@@ -211,7 +214,8 @@ service cloud.firestore {
           incoming().diff(existing()).affectedKeys().hasOnly([
             'displayName', 'photoURL', 'bannerURL', 'bio', 'age', 'gender',
             'themePreference', 'notificationsEnabled', 'profileVisibility',
-            'accountStatus', 'postCount', 'followerCount', 'followingCount', 'isVerified', 'updatedAt'
+            'accountStatus', 'postCount', 'followerCount', 'followingCount', 'isVerified',
+            'inviteCode', 'hideAge', 'updatedAt'
           ])) ||
         // Counter adjustment (+/- 1) on followerCount or followingCount
         (incoming().diff(existing()).affectedKeys().hasOnly(['followerCount', 'followingCount', 'updatedAt']))
@@ -338,7 +342,7 @@ service cloud.firestore {
             incoming().diff(existing()).affectedKeys().hasOnly([
               'authorNameSnapshot', 'authorPhotoSnapshot', 'authorAgeSnapshot', 'authorGenderSnapshot',
               'text', 'imageURL', 'imageStoragePath', 'imageCaption', 'topics', 'themeName',
-              'visibility', 'status', 'updatedAt'
+              'visibility', 'status', 'aspectRatio', 'updatedAt'
             ])) ||
           // Action 2: Bounded +/- 1 counter adjustment on public posts during like/comment actions
           (existing().visibility == 'public' &&

@@ -14,6 +14,7 @@ import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import org.junit.After
+import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -31,6 +32,16 @@ abstract class FirestoreEmulatorTestBase {
 
     @Before
     open fun setUpFirebase() {
+        val isReachable = try {
+            java.net.Socket().use { socket ->
+                socket.connect(java.net.InetSocketAddress(EMULATOR_HOST, FIRESTORE_PORT), 250)
+                true
+            }
+        } catch (_: Exception) {
+            false
+        }
+        assumeTrue("Firestore emulator is not running at $EMULATOR_HOST:$FIRESTORE_PORT", isReachable)
+
         val context = ApplicationProvider.getApplicationContext<Context>()
         databaseId = try {
             context.getString(com.example.R.string.firestore_database_id)
@@ -66,7 +77,9 @@ abstract class FirestoreEmulatorTestBase {
 
     @After
     open fun tearDownFirebase() {
-        auth.signOut()
+        if (::auth.isInitialized) {
+            auth.signOut()
+        }
     }
 
     // Local unit test helper ONLY (under app/src/test/). In application code (app/src/main/),

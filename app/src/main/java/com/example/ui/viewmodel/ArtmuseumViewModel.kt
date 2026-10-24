@@ -224,6 +224,21 @@ class ArtmuseumViewModel(
             )
     }
 
+    val followingUsers: StateFlow<List<UserFollow>> = if (isGuest) {
+        MutableStateFlow(emptyList())
+    } else {
+        repository.observeFollowing(currentUserId)
+            .catch { e ->
+                Log.w(TAG, "Error observing following", e)
+                emit(emptyList())
+            }
+            .stateIn(
+                scope = viewModelScope,
+                started = SharingStarted.WhileSubscribed(5000L),
+                initialValue = emptyList()
+            )
+    }
+
     private val rawPublicPosts: StateFlow<UiState<List<Post>>> = if (isGuest) {
         _guestPosts
             .map<List<Post>, UiState<List<Post>>> { posts -> UiState.Success(posts) }
@@ -413,6 +428,7 @@ class ArtmuseumViewModel(
         imageCaption: String,
         topics: List<String>,
         themePalette: ArtmuseumThemePalette,
+        aspectRatio: String = "1:1",
         onSuccess: () -> Unit
     ) {
         if (isGuest) {
@@ -433,7 +449,8 @@ class ArtmuseumViewModel(
                 likeCount = 0,
                 commentCount = 0,
                 visibility = "public",
-                status = "active"
+                status = "active",
+                aspectRatio = aspectRatio
             )
             _guestPosts.value = listOf(newPost) + _guestPosts.value
             _activeTheme.value = themePalette
@@ -456,7 +473,8 @@ class ArtmuseumViewModel(
                 imageURL = imageURL,
                 imageCaption = imageCaption,
                 topics = topics,
-                themeName = themePalette.label
+                themeName = themePalette.label,
+                aspectRatio = aspectRatio
             )
             _isSubmitting.value = false
             result.onSuccess {
@@ -573,6 +591,10 @@ class ArtmuseumViewModel(
         peerName: String,
         peerPhoto: String,
         text: String,
+        attachmentUrl: String = "",
+        attachmentType: String = "",
+        fileName: String = "",
+        fileSize: String = "",
         onSent: () -> Unit = {}
     ) {
         val profile = (userProfileState.value as? UiState.Success)?.data ?: UserProfile(
@@ -585,7 +607,11 @@ class ArtmuseumViewModel(
                 peerUid = peerUid,
                 peerName = peerName,
                 peerPhoto = peerPhoto,
-                text = text
+                text = text,
+                attachmentUrl = attachmentUrl,
+                attachmentType = attachmentType,
+                fileName = fileName,
+                fileSize = fileSize
             ).onSuccess {
                 onSent()
                 // If chatting with a community member, generate a thoughtful automatic reply after 1.4s
@@ -624,6 +650,10 @@ class ArtmuseumViewModel(
         }
     }
 
+    suspend fun findUserByInviteCode(code: String): UserProfile? {
+        return repository.findUserByInviteCode(code).getOrNull()
+    }
+
     fun saveProfileChanges(
         displayName: String,
         bio: String,
@@ -634,6 +664,8 @@ class ArtmuseumViewModel(
         themePalette: ArtmuseumThemePalette,
         notificationsEnabled: Boolean,
         profileVisibility: String,
+        hideAge: Boolean = false,
+        inviteCode: String = "",
         onSaved: () -> Unit
     ) {
         val parsedAge = ageInput.trim().toIntOrNull()
@@ -656,7 +688,9 @@ class ArtmuseumViewModel(
                 bannerURL = bannerURL,
                 themePreference = themePalette.label,
                 notificationsEnabled = notificationsEnabled,
-                profileVisibility = profileVisibility
+                profileVisibility = profileVisibility,
+                hideAge = hideAge,
+                inviteCode = inviteCode
             )
             _isSubmitting.value = false
             res.onSuccess {

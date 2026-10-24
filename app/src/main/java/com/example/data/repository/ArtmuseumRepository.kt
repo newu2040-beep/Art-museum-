@@ -139,7 +139,9 @@ class ArtmuseumRepository(
                 postCount = 0,
                 followerCount = 0,
                 followingCount = 0,
-                isVerified = false
+                isVerified = false,
+                inviteCode = UserProfile.generateDefaultInviteCode(uid),
+                hideAge = false
             )
             docRef.set(profile.toCreateMap()).await()
             UserProfile.fromSnapshot(docRef.get().await()) ?: profile
@@ -160,12 +162,15 @@ class ArtmuseumRepository(
         bannerURL: String,
         themePreference: String,
         notificationsEnabled: Boolean,
-        profileVisibility: String
+        profileVisibility: String,
+        hideAge: Boolean = false,
+        inviteCode: String = ""
     ): Result<Unit> = runCatching {
         val uid = requireUserId()
         val docRef = db.collection("users").document(uid)
         try {
             val existingSnap = docRef.get().await()
+            val effectiveCode = if (inviteCode.isNotBlank()) inviteCode.trim().take(32) else UserProfile.generateDefaultInviteCode(uid)
             if (!existingSnap.exists()) {
                 val newProfile = UserProfile(
                     documentId = uid,
@@ -179,7 +184,9 @@ class ArtmuseumRepository(
                     themePreference = ArtmuseumThemePalette.fromName(themePreference).label,
                     notificationsEnabled = notificationsEnabled,
                     profileVisibility = if (profileVisibility == "private") "private" else "public",
-                    accountStatus = "active"
+                    accountStatus = "active",
+                    inviteCode = effectiveCode,
+                    hideAge = hideAge
                 )
                 docRef.set(newProfile.toCreateMap()).await()
             } else {
@@ -193,6 +200,8 @@ class ArtmuseumRepository(
                     "themePreference" to ArtmuseumThemePalette.fromName(themePreference).label,
                     "notificationsEnabled" to notificationsEnabled,
                     "profileVisibility" to if (profileVisibility == "private") "private" else "public",
+                    "inviteCode" to effectiveCode,
+                    "hideAge" to hideAge,
                     "updatedAt" to FieldValue.serverTimestamp()
                 )
                 docRef.update(updates).await()
@@ -417,19 +426,21 @@ class ArtmuseumRepository(
         imageCaption: String = "",
         topics: List<String> = emptyList(),
         themeName: String = "Cream",
-        visibility: String = "public"
+        visibility: String = "public",
+        aspectRatio: String = "1:1"
     ): Result<String> = runCatching {
         val uid = requireUserId()
         val postId = "post_${UUID.randomUUID().toString().replace("-", "").take(20)}"
         val docRef = db.collection("posts").document(postId)
         try {
+            val authorAge = if (authorProfile.hideAge) 0 else authorProfile.age.coerceIn(13, 120)
             val post = Post(
                 documentId = postId,
                 postId = postId,
                 authorId = uid,
                 authorNameSnapshot = authorProfile.displayName.ifBlank { "Sophia" },
                 authorPhotoSnapshot = authorProfile.photoURL.ifBlank { "preset:avatar_sophia" },
-                authorAgeSnapshot = authorProfile.age.coerceIn(13, 120),
+                authorAgeSnapshot = authorAge,
                 authorGenderSnapshot = if (authorProfile.gender == "Male") "Male" else "Female",
                 text = text.trim().take(10000),
                 imageURL = imageURL,
@@ -439,7 +450,8 @@ class ArtmuseumRepository(
                 likeCount = 0,
                 commentCount = 0,
                 visibility = if (visibility == "private") "private" else "public",
-                status = "active"
+                status = "active",
+                aspectRatio = aspectRatio
             )
             docRef.set(post.toCreateMap()).await()
             postId
@@ -917,21 +929,72 @@ class ArtmuseumRepository(
         return flow.asStateFlow()
     }
 
+    suspend fun findUserByInviteCode(inviteCode: String): Result<UserProfile?> = runCatching {
+        val clean = inviteCode.trim().uppercase()
+        if (clean.isBlank()) return@runCatching null
+
+        // 1. Try direct exact match on inviteCode
+        val byCodeSnap = db.collection("users")
+            .whereEqualTo("inviteCode", clean)
+            .limit(1)
+            .get()
+            .await()
+
+        val foundDoc = byCodeSnap.documents.firstOrNull()
+        if (foundDoc != null) {
+            return@runCatching UserProfile.fromSnapshot(foundDoc)
+        }
+
+        // 2. Try match on document UID or generated invite code
+        val byUidDoc = db.collection("users").document(clean).get().await()
+        if (byUidDoc.exists()) {
+            return@runCatching UserProfile.fromSnapshot(byUidDoc)
+        }
+
+        // 3. Scan public active users for prefix or derived code match
+        val usersSnap = db.collection("users")
+            .whereEqualTo("accountStatus", "active")
+            .limit(60)
+            .get()
+            .await()
+
+        val matched = usersSnap.documents.firstOrNull { doc ->
+            val p = UserProfile.fromSnapshot(doc)
+            p != null && (p.inviteCode.equals(clean, ignoreCase = true) ||
+                    p.uid.equals(clean, ignoreCase = true) ||
+                    UserProfile.generateDefaultInviteCode(p.uid).equals(clean, ignoreCase = true) ||
+                    clean.contains(p.uid.take(6), ignoreCase = true))
+        }
+
+        matched?.let { UserProfile.fromSnapshot(it) }
+    }
+
     suspend fun sendDirectMessage(
         senderProfile: UserProfile,
         peerUid: String,
         peerName: String,
         peerPhoto: String,
-        text: String
+        text: String,
+        attachmentUrl: String = "",
+        attachmentType: String = "",
+        fileName: String = "",
+        fileSize: String = ""
     ): Result<DirectChatMessage> = runCatching {
         val uid = auth.currentUser?.uid ?: senderProfile.uid.ifBlank { "current_user" }
         val trimmed = text.trim().take(1000)
-        require(trimmed.isNotEmpty()) { "Message cannot be empty" }
+        require(trimmed.isNotEmpty() || attachmentUrl.isNotEmpty()) { "Message or attachment cannot be empty" }
 
         val chatId = if (peerUid.startsWith("chat_")) peerUid else "chat_${peerUid.take(16)}"
         val messageId = "msg_${UUID.randomUUID().toString().replace("-", "").take(16)}"
         val now = System.currentTimeMillis()
         val timeStr = timeFormat.format(Date(now))
+
+        val previewSnippet = when {
+            trimmed.isNotEmpty() -> trimmed
+            attachmentType == "image" -> "📷 Shared an artwork image"
+            attachmentType == "file" -> "📄 $fileName"
+            else -> "Shared an attachment"
+        }
 
         val newMsg = DirectChatMessage(
             messageId = messageId,
@@ -939,6 +1002,10 @@ class ArtmuseumRepository(
             senderUid = uid,
             receiverUid = peerUid,
             text = trimmed,
+            attachmentUrl = attachmentUrl,
+            attachmentType = attachmentType,
+            fileName = fileName,
+            fileSize = fileSize,
             timestamp = now,
             isFromMe = true,
             formattedTime = timeStr
@@ -955,7 +1022,7 @@ class ArtmuseumRepository(
             peerUid = peerUid,
             peerName = peerName.ifBlank { "Museum Member" },
             peerPhotoURL = peerPhoto.ifBlank { "preset:avatar_sophia" },
-            lastMessage = trimmed,
+            lastMessage = previewSnippet,
             lastMessageTimeFormatted = "Just now",
             unreadCount = 0,
             lastMessageTimestamp = now
@@ -966,14 +1033,14 @@ class ArtmuseumRepository(
         existingConversations.add(0, updatedConv)
         localConversationsState.value = existingConversations
 
-        // Best effort Firestore sync
+        // Best effort Firestore sync and in-app/push notification to recipient
         try {
             val chatDoc = db.collection("chats").document(chatId)
             chatDoc.set(
                 mapOf(
                     "chatId" to chatId,
                     "participantIds" to listOf(uid, peerUid).distinct(),
-                    "lastMessage" to trimmed,
+                    "lastMessage" to previewSnippet,
                     "updatedAt" to FieldValue.serverTimestamp()
                 )
             ).await()
@@ -984,9 +1051,18 @@ class ArtmuseumRepository(
                     "senderUid" to uid,
                     "receiverUid" to peerUid,
                     "text" to trimmed,
+                    "attachmentType" to attachmentType,
+                    "fileName" to fileName,
                     "createdAt" to FieldValue.serverTimestamp()
                 )
             ).await()
+
+            createNotification(
+                recipientUid = peerUid,
+                actorProfile = senderProfile,
+                type = "system",
+                message = "${senderProfile.displayName}: $previewSnippet"
+            )
         } catch (_: Exception) {
             // Local state is already updated
         }

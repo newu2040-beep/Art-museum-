@@ -15,9 +15,11 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -599,7 +601,10 @@ fun ArtmuseumPostCard(
     onShareClick: () -> Unit,
     onMoreClick: () -> Unit,
     onAuthorClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    showFollowButton: Boolean = false,
+    isFollowingAuthor: Boolean = false,
+    onToggleFollowAuthor: () -> Unit = {}
 ) {
     val colors = LocalArtmuseumColors.current
     val dimens = LocalArtmuseumDimensions.current
@@ -646,13 +651,49 @@ fun ArtmuseumPostCard(
                         ),
                         color = colors.inkPrimary
                     )
+                    val authorSubtitle = remember(post.authorAgeSnapshot, post.authorGenderSnapshot) {
+                        if (post.authorAgeSnapshot > 0) {
+                            if (post.authorGenderSnapshot.isNotBlank()) "${post.authorAgeSnapshot} · ${post.authorGenderSnapshot}" else "${post.authorAgeSnapshot}"
+                        } else {
+                            post.authorGenderSnapshot.ifBlank { "Curator" }
+                        }
+                    }
                     Text(
-                        text = "${post.authorAgeSnapshot} · ${post.authorGenderSnapshot}",
+                        text = authorSubtitle,
                         style = MaterialTheme.typography.bodySmall.copy(
                             fontSize = if (dimens.isCompact) 11.5.sp else 12.sp
                         ),
                         color = colors.mutedText
                     )
+                }
+                if (showFollowButton) {
+                    Surface(
+                        onClick = onToggleFollowAuthor,
+                        shape = ArtmuseumShapeTokens.Pill,
+                        color = if (isFollowingAuthor) colors.subtleSurface else colors.pillSelectedFill,
+                        border = BorderStroke(
+                            0.7.dp,
+                            if (isFollowingAuthor) colors.border else colors.pillSelectedFill
+                        ),
+                        modifier = Modifier
+                            .height(28.dp)
+                            .testTag("post_follow_${post.postId}")
+                    ) {
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier.padding(horizontal = 11.dp)
+                        ) {
+                            Text(
+                                text = if (isFollowingAuthor) "Following" else "Follow",
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontWeight = FontWeight.SemiBold,
+                                    fontSize = 11.sp
+                                ),
+                                color = if (isFollowingAuthor) colors.inkPrimary else colors.pillSelectedText
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.width(6.dp))
                 }
                 Icon(
                     imageVector = Icons.Filled.MoreVert,
@@ -689,12 +730,27 @@ fun ArtmuseumPostCard(
             }
 
             if (hasArtwork) {
+                val baseRatio = post.aspectRatio.substringBefore("_")
+                val sizeKey = post.aspectRatio.substringAfter("_", "standard")
+                val ratioModifier = remember(baseRatio, sizeKey) {
+                    val arMod = when (baseRatio) {
+                        "4:5" -> Modifier.aspectRatio(4f / 5f)
+                        "16:9" -> Modifier.aspectRatio(16f / 9f)
+                        "3:4" -> Modifier.aspectRatio(3f / 4f)
+                        else -> Modifier.aspectRatio(1f)
+                    }
+                    when (sizeKey) {
+                        "compact" -> Modifier.heightIn(max = 200.dp).then(arMod)
+                        "large" -> Modifier.heightIn(max = 420.dp).then(arMod)
+                        else -> arMod
+                    }
+                }
                 ArtmuseumArtworkImage(
                     imageSource = post.imageURL,
                     contentDescription = post.imageCaption.ifBlank { "Exhibit artwork" },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(if (dimens.isCompact) 180.dp else 210.dp)
+                        .then(ratioModifier)
                         .clip(ArtmuseumShapeTokens.ArtworkFrame)
                 )
                 Spacer(modifier = Modifier.height(10.dp))

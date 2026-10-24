@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -101,17 +102,20 @@ fun HomeFeedScreen(
     selectedFilter: String,
     likedPostIds: Set<String>,
     savedPostIds: Set<String>,
+    followingUserIds: Set<String> = emptySet(),
     unreadNotificationCount: Int,
     unreadMessageCount: Int = 0,
     onSelectFilter: (String) -> Unit,
     onOpenPostDetail: (Post) -> Unit,
     onToggleLike: (Post) -> Unit,
     onToggleSave: (String) -> Unit,
+    onToggleFollowUser: (targetUid: String, targetName: String, targetPhotoURL: String) -> Unit = { _, _, _ -> },
     onOpenCreatePost: () -> Unit,
     onOpenSearch: () -> Unit,
     onOpenNotifications: () -> Unit,
     onOpenDirectMessages: () -> Unit,
     onOpenProfile: () -> Unit,
+    onOpenCreatorProfile: (authorId: String, authorName: String, authorPhoto: String) -> Unit = { _, _, _ -> },
     onReportPost: (Post) -> Unit,
     onBlockAuthor: (Post) -> Unit,
     onDeleteOwnPost: (Post) -> Unit,
@@ -433,8 +437,13 @@ fun HomeFeedScreen(
                                             if (post.authorId == currentUserId) {
                                                 onOpenProfile()
                                             } else {
-                                                onOpenPostDetail(post)
+                                                onOpenCreatorProfile(post.authorId, post.authorNameSnapshot, post.authorPhotoSnapshot)
                                             }
+                                        },
+                                        showFollowButton = post.authorId.isNotBlank() && post.authorId != currentUserId,
+                                        isFollowingAuthor = post.authorId in followingUserIds,
+                                        onToggleFollowAuthor = {
+                                            onToggleFollowUser(post.authorId, post.authorNameSnapshot, post.authorPhotoSnapshot)
                                         }
                                     )
 
@@ -526,6 +535,9 @@ fun PostDetailScreen(
     onDeleteComment: (String) -> Unit,
     onToggleCommentLike: (String) -> Unit = {},
     onMessageAuthor: (peerUid: String, peerName: String, peerPhoto: String) -> Unit = { _, _, _ -> },
+    onOpenCreatorProfile: (authorId: String, authorName: String, authorPhoto: String) -> Unit = { _, _, _ -> },
+    isFollowingAuthor: Boolean = false,
+    onToggleFollowAuthor: () -> Unit = {},
     onReportPost: () -> Unit,
     onDeletePost: () -> Unit
 ) {
@@ -548,11 +560,20 @@ fun PostDetailScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(bottom = 86.dp)
         ) {
-            // Top Full-Bleed Artwork Hero (Matches Screen 3 of mockup with < button, overflow button, and "1/1" pill badge)
+            // Top Full-Bleed Artwork Hero (Adapts dynamically to natural post aspect ratio)
+            val heroRatioModifier = remember(post.aspectRatio) {
+                when (post.aspectRatio.substringBefore("_")) {
+                    "4:5" -> Modifier.aspectRatio(4f / 5f)
+                    "16:9" -> Modifier.aspectRatio(16f / 9f)
+                    "3:4" -> Modifier.aspectRatio(3f / 4f)
+                    "1:1" -> Modifier.aspectRatio(1f)
+                    else -> Modifier.height(320.dp)
+                }
+            }
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(320.dp)
+                    .then(heroRatioModifier)
             ) {
                 ArtmuseumArtworkImage(
                     imageSource = post.imageURL.ifBlank { "preset:coastal_villa" },
@@ -652,10 +673,21 @@ fun PostDetailScreen(
                         ArtmuseumAvatar(
                             photoURL = post.authorPhotoSnapshot,
                             contentDescription = post.authorNameSnapshot,
-                            size = 44.dp
+                            size = 44.dp,
+                            onClick = {
+                                if (post.authorId != currentUserId) {
+                                    onOpenCreatorProfile(post.authorId, post.authorNameSnapshot, post.authorPhotoSnapshot)
+                                }
+                            }
                         )
                         Spacer(modifier = Modifier.width(12.dp))
-                        Column {
+                        Column(
+                            modifier = Modifier.clickable {
+                                if (post.authorId != currentUserId) {
+                                    onOpenCreatorProfile(post.authorId, post.authorNameSnapshot, post.authorPhotoSnapshot)
+                                }
+                            }
+                        ) {
                             Text(
                                 text = post.authorNameSnapshot,
                                 style = MaterialTheme.typography.titleMedium.copy(
@@ -664,8 +696,15 @@ fun PostDetailScreen(
                                 ),
                                 color = colors.inkPrimary
                             )
+                            val authorSubtitle = remember(post.authorAgeSnapshot, post.authorGenderSnapshot) {
+                                if (post.authorAgeSnapshot > 0) {
+                                    if (post.authorGenderSnapshot.isNotBlank()) "${post.authorAgeSnapshot} · ${post.authorGenderSnapshot}" else "${post.authorAgeSnapshot}"
+                                } else {
+                                    post.authorGenderSnapshot.ifBlank { "Curator" }
+                                }
+                            }
                             Text(
-                                text = "${post.authorAgeSnapshot} · ${post.authorGenderSnapshot}",
+                                text = authorSubtitle,
                                 style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.5.sp),
                                 color = colors.mutedText
                             )
@@ -673,6 +712,26 @@ fun PostDetailScreen(
 
                         if (post.authorId != currentUserId) {
                             Spacer(modifier = Modifier.weight(1f))
+                            Surface(
+                                onClick = onToggleFollowAuthor,
+                                shape = ArtmuseumShapeTokens.Pill,
+                                color = if (isFollowingAuthor) colors.subtleSurface else colors.pillSelectedFill,
+                                border = BorderStroke(
+                                    0.8.dp,
+                                    if (isFollowingAuthor) colors.border else colors.pillSelectedFill
+                                ),
+                                modifier = Modifier.testTag("post_detail_follow_author_button")
+                            ) {
+                                Text(
+                                    text = if (isFollowingAuthor) "Following" else "Follow",
+                                    style = MaterialTheme.typography.labelMedium.copy(
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = if (isFollowingAuthor) colors.inkPrimary else colors.pillSelectedText
+                                    ),
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
                             Surface(
                                 shape = ArtmuseumShapeTokens.Pill,
                                 color = colors.subtleSurface,

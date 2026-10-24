@@ -3,8 +3,11 @@ package com.example
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import com.example.data.model.ArtmuseumThemePalette
+import com.example.data.model.DirectChatMessage
 import com.example.data.model.GUEST_PROFILE
 import com.example.data.model.GUEST_SAMPLE_POSTS
+import com.example.data.model.Post
+import com.example.data.model.UserProfile
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -51,5 +54,30 @@ class ExampleRobolectricTest {
     assertEquals(0, GUEST_PROFILE.followerCount)
     assertEquals(0, GUEST_PROFILE.followingCount)
     assertEquals(0, GUEST_PROFILE.postCount)
+  }
+
+  @Test
+  fun `verify invite code generation, hide age, aspect ratio, and chat attachments`() {
+    val code = UserProfile.generateDefaultInviteCode("user_sophia_123")
+    assertTrue(code.startsWith("ART-"))
+    assertEquals(10, code.length)
+
+    val profile = UserProfile(uid = "user_sophia_123", displayName = "Sophia", hideAge = true, inviteCode = code)
+    assertTrue(profile.hideAge)
+    assertEquals(code, profile.inviteCode)
+
+    val portraitPost = Post(postId = "p1", text = "Portrait study", aspectRatio = "4:5")
+    assertEquals("4:5", portraitPost.aspectRatio)
+
+    val attachmentMsg = DirectChatMessage(
+      messageId = "m1",
+      text = "Check out this sketch",
+      attachmentUrl = "data:image/jpeg;base64,abc",
+      attachmentType = "image",
+      fileName = "sketch.jpg",
+      fileSize = "240 KB"
+    )
+    assertEquals("image", attachmentMsg.attachmentType)
+    assertEquals("sketch.jpg", attachmentMsg.fileName)
   }
 }
