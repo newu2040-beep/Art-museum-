@@ -272,12 +272,12 @@ fun ArtmuseumPrimaryButton(
     Button(
         onClick = onClick,
         enabled = enabled && !isLoading,
-        shape = ArtmuseumShapeTokens.Pill,
+        shape = ArtmuseumShapeTokens.Button,
         colors = ButtonDefaults.buttonColors(
-            containerColor = colors.pillSelectedFill,
-            contentColor = colors.pillSelectedText,
-            disabledContainerColor = colors.pillSelectedFill.copy(alpha = 0.55f),
-            disabledContentColor = colors.pillSelectedText.copy(alpha = 0.75f)
+            containerColor = colors.autumnPrimary,
+            contentColor = colors.autumnCream,
+            disabledContainerColor = colors.autumnPrimary.copy(alpha = 0.55f),
+            disabledContentColor = colors.autumnCream.copy(alpha = 0.75f)
         ),
         contentPadding = PaddingValues(horizontal = 22.dp, vertical = 13.dp),
         modifier = modifier
@@ -610,22 +610,47 @@ fun ArtmuseumPostCard(
     val dimens = LocalArtmuseumDimensions.current
     // Whole UI active theme card background
     val cardBg = colors.cardSurface
+    val cardSticker = remember(post.postId) {
+        val stickers = listOf(
+            R.drawable.st_apple,
+            R.drawable.st_star_red,
+            R.drawable.st_strawberry,
+            R.drawable.st_heart_denim,
+            R.drawable.st_croissant,
+            R.drawable.st_candy,
+            R.drawable.st_clock
+        )
+        stickers[kotlin.math.abs(post.postId.hashCode()) % stickers.size]
+    }
+    val cardStickerRotation = remember(post.postId) {
+        val angles = listOf(-12f, 8f, -6f, 14f, -9f, 10f)
+        angles[kotlin.math.abs(post.postId.hashCode()) % angles.size]
+    }
 
-    Surface(
-        onClick = onCardClick,
-        shape = ArtmuseumShapeTokens.Card,
-        color = cardBg,
-        border = BorderStroke(0.6.dp, colors.border),
-        shadowElevation = 1.5.dp,
-        modifier = modifier
-            .fillMaxWidth()
-            .testTag("post_card_${post.postId}")
+    Box(
+        modifier = modifier.fillMaxWidth()
     ) {
-        Column(
+        Surface(
+            onClick = onCardClick,
+            shape = ArtmuseumShapeTokens.Card,
+            color = cardBg,
+            border = BorderStroke(0.8.dp, colors.border),
+            shadowElevation = 2.dp,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(dimens.cardPadding)
+                .testTag("post_card_${post.postId}")
         ) {
+            Column(
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                // Plaid header strip
+                PlaidCardHeader(height = 14.dp, cornerRadius = 20.dp)
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(dimens.cardPadding)
+                ) {
             // Author Header Row
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -781,6 +806,18 @@ fun ArtmuseumPostCard(
                 postId = post.postId
             )
         }
+    }
+}
+
+        // Small rotated sticker on the top-right corner, overlapping the edge
+        Sticker(
+            drawableRes = cardSticker,
+            size = 32.dp,
+            rotation = cardStickerRotation,
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .offset(x = (-14).dp, y = (-7).dp)
+        )
     }
 }
 
@@ -1103,11 +1140,11 @@ fun ArtmuseumBottomNavigation(
                         .testTag("fab_create_post")
                 ) {
                     Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            imageVector = Icons.Filled.Add,
+                        Sticker(
+                            drawableRes = R.drawable.st_bow,
                             contentDescription = "Create exhibit",
-                            tint = Color.White,
-                            modifier = Modifier.size(if (dimens.isCompact) 22.dp else 25.dp)
+                            size = if (dimens.isCompact) 28.dp else 32.dp,
+                            enableWobble = true
                         )
                     }
                 }

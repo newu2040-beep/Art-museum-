@@ -76,7 +76,9 @@ import com.example.data.model.PRESET_ARTWORKS
 import com.example.ui.components.ArtmuseumArtworkImage
 import com.example.ui.components.ArtmuseumThemeSwatch
 import com.example.ui.components.ArtmuseumTopicChip
+import com.example.ui.components.PaperBackgroundOverlay
 import com.example.ui.theme.ArtmuseumShapeTokens
+import com.example.ui.theme.CaveatFontFamily
 import com.example.ui.theme.LocalArtmuseumColors
 import com.example.ui.theme.LocalArtmuseumDimensions
 import com.example.ui.theme.OlivePillActive
@@ -172,6 +174,9 @@ fun CreatePostScreen(
             .fillMaxSize()
             .background(colors.background)
     ) {
+        // Paper texture at low opacity
+        PaperBackgroundOverlay(opacity = 0.10f)
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -180,7 +185,7 @@ fun CreatePostScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp, vertical = 10.dp)
         ) {
-            // Top Bar (Matches Screen 4 of mockup: < back icon, "Create Post" serif title, olive "Post" pill button)
+            // Top Bar
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth()
@@ -198,11 +203,11 @@ fun CreatePostScreen(
                 )
 
                 Text(
-                    text = "Create Post",
+                    text = "Pin New Exhibit",
                     style = MaterialTheme.typography.headlineMedium.copy(
-                        fontFamily = PlayfairDisplayFontFamily,
-                        fontWeight = FontWeight.Medium,
-                        fontSize = 20.sp
+                        fontFamily = CaveatFontFamily,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 24.sp
                     ),
                     color = colors.inkPrimary,
                     modifier = Modifier
@@ -222,14 +227,14 @@ fun CreatePostScreen(
                         )
                     },
                     enabled = !isSubmitting && !isEncodingImage,
-                    shape = ArtmuseumShapeTokens.Pill,
+                    shape = ArtmuseumShapeTokens.Button,
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = colors.pillSelectedFill,
-                        contentColor = colors.pillSelectedText
+                        containerColor = colors.autumnPrimary,
+                        contentColor = colors.autumnCream
                     ),
                     contentPadding = PaddingValues(horizontal = if (dimens.isCompact) 16.dp else 22.dp, vertical = 6.dp),
                     modifier = Modifier
-                        .height(if (dimens.isCompact) 34.dp else 38.dp)
+                        .height(if (dimens.isCompact) 36.dp else 40.dp)
                         .testTag("publish_post_button")
                 ) {
                     if (isSubmitting) {

@@ -9,6 +9,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import com.example.R
 
+// Handwritten display font for scrapbook titles and headers
+val CaveatFontFamily = FontFamily(
+    Font(R.font.caveat, FontWeight.Normal),
+    Font(R.font.caveat, FontWeight.Medium),
+    Font(R.font.caveat, FontWeight.SemiBold),
+    Font(R.font.caveat, FontWeight.Bold)
+)
+
 val PlayfairDisplayFontFamily = FontFamily(
     Font(R.font.playfair_display, FontWeight.Normal),
     Font(R.font.playfair_display, FontWeight.Medium),
@@ -16,6 +24,7 @@ val PlayfairDisplayFontFamily = FontFamily(
     Font(R.font.playfair_display, FontWeight.Bold)
 )
 
+// Clean readable font for body and captions
 val PlusJakartaSansFontFamily = FontFamily(
     Font(R.font.plus_jakarta_sans, FontWeight.Normal),
     Font(R.font.plus_jakarta_sans, FontWeight.Medium),
@@ -25,35 +34,41 @@ val PlusJakartaSansFontFamily = FontFamily(
 
 val Typography = Typography(
     displayLarge = TextStyle(
-        fontFamily = PlayfairDisplayFontFamily,
-        fontWeight = FontWeight.Normal,
-        fontSize = 38.sp,
-        lineHeight = 44.sp,
+        fontFamily = CaveatFontFamily,
+        fontWeight = FontWeight.Bold,
+        fontSize = 42.sp,
+        lineHeight = 46.sp,
         letterSpacing = (-0.5).sp
     ),
     displayMedium = TextStyle(
-        fontFamily = PlayfairDisplayFontFamily,
-        fontWeight = FontWeight.Normal,
-        fontSize = 30.sp,
-        lineHeight = 36.sp
+        fontFamily = CaveatFontFamily,
+        fontWeight = FontWeight.Bold,
+        fontSize = 34.sp,
+        lineHeight = 38.sp
     ),
     headlineLarge = TextStyle(
-        fontFamily = PlayfairDisplayFontFamily,
-        fontWeight = FontWeight.Medium,
-        fontSize = 24.sp,
-        lineHeight = 30.sp
+        fontFamily = CaveatFontFamily,
+        fontWeight = FontWeight.Bold,
+        fontSize = 28.sp,
+        lineHeight = 32.sp
     ),
     headlineMedium = TextStyle(
-        fontFamily = PlayfairDisplayFontFamily,
-        fontWeight = FontWeight.Medium,
-        fontSize = 20.sp,
+        fontFamily = CaveatFontFamily,
+        fontWeight = FontWeight.SemiBold,
+        fontSize = 24.sp,
+        lineHeight = 28.sp
+    ),
+    headlineSmall = TextStyle(
+        fontFamily = CaveatFontFamily,
+        fontWeight = FontWeight.SemiBold,
+        fontSize = 21.sp,
         lineHeight = 26.sp
     ),
     titleLarge = TextStyle(
-        fontFamily = PlayfairDisplayFontFamily,
-        fontWeight = FontWeight.Medium,
-        fontSize = 19.sp,
-        lineHeight = 24.sp
+        fontFamily = CaveatFontFamily,
+        fontWeight = FontWeight.Bold,
+        fontSize = 22.sp,
+        lineHeight = 26.sp
     ),
     titleMedium = TextStyle(
         fontFamily = PlusJakartaSansFontFamily,
@@ -71,7 +86,7 @@ val Typography = Typography(
         fontFamily = PlusJakartaSansFontFamily,
         fontWeight = FontWeight.Normal,
         fontSize = 15.sp,
-        lineHeight = 23.sp
+        lineHeight = 22.sp
     ),
     bodyMedium = TextStyle(
         fontFamily = PlusJakartaSansFontFamily,

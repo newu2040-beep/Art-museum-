@@ -82,7 +82,12 @@ import com.example.R
 import com.example.ui.components.ArtmuseumOliveEmblem
 import com.example.ui.components.ArtmuseumPrimaryButton
 import com.example.ui.components.ArtmuseumSecondaryButton
+import com.example.ui.components.PaperBackgroundOverlay
+import com.example.ui.components.Sticker
 import com.example.ui.theme.ArtmuseumShapeTokens
+import com.example.ui.theme.AutumnChocolate
+import com.example.ui.theme.AutumnCream
+import com.example.ui.theme.CaveatFontFamily
 import com.example.ui.theme.InkPrimary
 import com.example.ui.theme.MuseumBorder
 import com.example.ui.theme.MuseumCream
@@ -304,9 +309,11 @@ fun ArtmuseumWelcomeAuthScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(MuseumCream)
+            .background(AutumnCream)
     ) {
-        // Top painterly background blending seamlessly into Museum Cream (matches Screen 1 of mockup)
+        // Paper texture at low opacity
+        PaperBackgroundOverlay(opacity = 0.12f)
+
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier
@@ -319,76 +326,64 @@ fun ArtmuseumWelcomeAuthScreen(
         ) {
             Spacer(modifier = Modifier.height(10.dp))
 
-            // Botanical Olive Emblem
-            ArtmuseumOliveEmblem(
-                size = 44.dp,
-                showCircleMedallion = false
-            )
-
-            Spacer(modifier = Modifier.height(6.dp))
-
-            // Wordmark "Artmuseum"
-            Text(
-                text = "Artmuseum",
-                style = MaterialTheme.typography.displayLarge.copy(
-                    fontFamily = PlayfairDisplayFontFamily,
-                    fontSize = 38.sp,
-                    color = InkPrimary
-                ),
-                textAlign = TextAlign.Center
-            )
+            // Autumn Wordmark Header with stickers
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                Sticker(
+                    drawableRes = R.drawable.st_star_yellow,
+                    size = 32.dp,
+                    rotation = -12f,
+                    enableWobble = true
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "Artmuseum",
+                    style = MaterialTheme.typography.displayLarge.copy(
+                        fontFamily = CaveatFontFamily,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 44.sp,
+                        color = AutumnChocolate
+                    ),
+                    textAlign = TextAlign.Center
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Sticker(
+                    drawableRes = R.drawable.st_apple,
+                    size = 28.dp,
+                    rotation = 10f,
+                    enableWobble = true
+                )
+            }
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // Hero painting from mockup with soft top/bottom cream vignette
+            // Welcome Autumn Character Illustration
             Box(
+                contentAlignment = Alignment.Center,
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f, fill = true)
                     .clip(RoundedCornerShape(24.dp))
             ) {
                 Image(
-                    painter = painterResource(id = R.drawable.art_welcome_sea),
-                    contentDescription = "Classical coastal painting",
-                    contentScale = ContentScale.Crop,
+                    painter = painterResource(id = R.drawable.char_autumn),
+                    contentDescription = "Welcome Autumn Companion",
+                    contentScale = ContentScale.Fit,
                     modifier = Modifier.fillMaxSize()
-                )
-                // Soft gradient fade at top and bottom edges to match mockup atmosphere
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(44.dp)
-                        .align(Alignment.TopCenter)
-                        .background(
-                            Brush.verticalGradient(
-                                colors = listOf(MuseumCream.copy(alpha = 0.85f), Color.Transparent)
-                            )
-                        )
-                )
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp)
-                        .align(Alignment.BottomCenter)
-                        .background(
-                            Brush.verticalGradient(
-                                colors = listOf(Color.Transparent, MuseumCream.copy(alpha = 0.94f))
-                            )
-                        )
                 )
             }
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Quote in italic serif
+            // Friendly autumn welcome message
             Text(
-                text = "“Art is not what you see,\nbut what you make others see.”",
+                text = "“Welcome to our cozy autumn corner!\nShare moments, follow friends, and collect memories together.”",
                 style = MaterialTheme.typography.bodyMedium.copy(
-                    fontFamily = PlayfairDisplayFontFamily,
-                    fontStyle = FontStyle.Italic,
-                    fontSize = 14.5.sp,
-                    lineHeight = 21.sp,
-                    color = InkPrimary.copy(alpha = 0.82f)
+                    fontSize = 15.sp,
+                    lineHeight = 22.sp,
+                    color = AutumnChocolate
                 ),
                 textAlign = TextAlign.Center
             )

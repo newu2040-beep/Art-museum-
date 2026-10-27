@@ -91,7 +91,14 @@ import com.example.ui.theme.LocalArtmuseumDimensions
 import com.example.ui.theme.OlivePillActive
 import com.example.ui.theme.PlayfairDisplayFontFamily
 import com.example.ui.theme.WarmPaper
+import com.example.R
+import com.example.ui.components.ArtmuseumScrapbookEmptyState
+import com.example.ui.components.CornerPumpkin
+import com.example.ui.components.PaperBackgroundOverlay
+import com.example.ui.components.ScatteredDoodlesBackground
+import com.example.ui.components.Sticker
 import com.example.ui.components.VideoBanner
+import com.example.ui.theme.CaveatFontFamily
 import com.example.ui.viewmodel.UiState
 import java.util.Locale
 
@@ -133,6 +140,19 @@ fun HomeFeedScreen(
             .fillMaxSize()
             .background(colors.background)
     ) {
+        // Paper texture at low opacity
+        PaperBackgroundOverlay(opacity = 0.12f)
+
+        // Pumpkin partially visible at a screen corner
+        CornerPumpkin(
+            modifier = Modifier.align(Alignment.TopStart),
+            size = 110.dp,
+            alignment = Alignment.TopStart
+        )
+
+        // Doodles scattered at 30% opacity behind content
+        ScatteredDoodlesBackground()
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -148,11 +168,15 @@ fun HomeFeedScreen(
                         vertical = if (dimens.isCompact) 6.dp else 10.dp
                     )
             ) {
-                ArtmuseumOliveEmblem(
+                // Header Corner Decoration: Yellow Star Sticker
+                Sticker(
+                    drawableRes = R.drawable.st_star_yellow,
                     size = if (dimens.isCompact) 28.dp else 34.dp,
-                    showCircleMedallion = true
+                    rotation = -14f,
+                    enableWobble = true
                 )
-                Spacer(modifier = Modifier.width(if (dimens.isCompact) 8.dp else 10.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.weight(1f)
@@ -160,9 +184,9 @@ fun HomeFeedScreen(
                     Text(
                         text = "Artmuseum",
                         style = MaterialTheme.typography.headlineMedium.copy(
-                            fontFamily = PlayfairDisplayFontFamily,
-                            fontWeight = FontWeight.Medium,
-                            fontSize = dimens.headerTitleSize
+                            fontFamily = CaveatFontFamily,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = if (dimens.isCompact) 26.sp else 30.sp
                         ),
                         color = colors.inkPrimary
                     )
@@ -271,6 +295,14 @@ fun HomeFeedScreen(
                     onClick = onOpenProfile,
                     modifier = Modifier.testTag("home_avatar_button")
                 )
+                Spacer(modifier = Modifier.width(4.dp))
+                // Header Corner Decoration: Apple Sticker
+                Sticker(
+                    drawableRes = R.drawable.st_apple,
+                    size = if (dimens.isCompact) 26.dp else 30.dp,
+                    rotation = 12f,
+                    enableWobble = true
+                )
             }
 
             // Horizontal Pill Filter Row: For You, Life, Love, Courage, Growth, Peace, Art
@@ -297,7 +329,22 @@ fun HomeFeedScreen(
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
                     ) {
-                        CircularProgressIndicator(color = colors.pillSelectedFill)
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Sticker(
+                                drawableRes = R.drawable.st_apple,
+                                size = 56.dp,
+                                enableBounce = true
+                            )
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Text(
+                                text = "Gathering exhibits...",
+                                style = MaterialTheme.typography.titleMedium.copy(
+                                    fontFamily = CaveatFontFamily,
+                                    fontSize = 20.sp
+                                ),
+                                color = colors.inkPrimary
+                            )
+                        }
                     }
                 }
 
@@ -339,76 +386,13 @@ fun HomeFeedScreen(
 
                         if (feedState.data.isEmpty()) {
                             item(key = "home_empty_state") {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(vertical = if (dimens.isCompact) 20.dp else 36.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Surface(
-                                        shape = ArtmuseumShapeTokens.Card,
-                                        color = colors.cardSurface,
-                                        border = BorderStroke(0.6.dp, colors.border),
-                                        shadowElevation = 1.dp,
-                                        modifier = Modifier.fillMaxWidth()
-                                    ) {
-                                        Column(
-                                            horizontalAlignment = Alignment.CenterHorizontally,
-                                            modifier = Modifier.padding(horizontal = 20.dp, vertical = 24.dp)
-                                        ) {
-                                            Box(
-                                                contentAlignment = Alignment.Center,
-                                                modifier = Modifier
-                                                    .size(if (dimens.isCompact) 46.dp else 54.dp)
-                                                    .clip(CircleShape)
-                                                    .background(colors.subtleSurface)
-                                            ) {
-                                                Icon(
-                                                    imageVector = Icons.Outlined.Palette,
-                                                    contentDescription = null,
-                                                    tint = colors.pillSelectedFill,
-                                                    modifier = Modifier.size(if (dimens.isCompact) 24.dp else 28.dp)
-                                                )
-                                            }
-                                            Spacer(modifier = Modifier.height(12.dp))
-                                            Text(
-                                                text = if (selectedFilter == "For You") "The Gallery is Open" else "No Exhibits in '$selectedFilter'",
-                                                style = MaterialTheme.typography.titleLarge.copy(
-                                                    fontFamily = PlayfairDisplayFontFamily,
-                                                    fontWeight = FontWeight.Bold,
-                                                    fontSize = if (dimens.isCompact) 18.sp else 20.sp
-                                                ),
-                                                color = colors.inkPrimary,
-                                                textAlign = TextAlign.Center
-                                            )
-                                            Spacer(modifier = Modifier.height(6.dp))
-                                            Text(
-                                                text = "Every exhibit here is created in real time by museum visitors. Tap + below to publish the first artwork or thought.",
-                                                style = MaterialTheme.typography.bodyMedium.copy(
-                                                    fontSize = if (dimens.isCompact) 12.5.sp else 13.5.sp,
-                                                    lineHeight = 19.sp
-                                                ),
-                                                color = colors.mutedText,
-                                                textAlign = TextAlign.Center
-                                            )
-                                            Spacer(modifier = Modifier.height(16.dp))
-                                            ArtmuseumPrimaryButton(
-                                                text = "Publish First Exhibit",
-                                                onClick = onOpenCreatePost,
-                                                leadingContent = {
-                                                    Icon(
-                                                        imageVector = Icons.Filled.Add,
-                                                        contentDescription = null,
-                                                        tint = Color.White,
-                                                        modifier = Modifier.size(16.dp)
-                                                    )
-                                                },
-                                                modifier = Modifier.fillMaxWidth(0.9f),
-                                                testTag = "empty_feed_create_button"
-                                            )
-                                        }
-                                    }
-                                }
+                                ArtmuseumScrapbookEmptyState(
+                                    title = if (selectedFilter == "For You") "The Scrapbook Gallery is Open" else "No Exhibits in '$selectedFilter'",
+                                    message = "Every exhibit here is pinned by visitors in real time. Tap the candy below to publish the first artwork or autumn thought.",
+                                    useCharacter = true,
+                                    actionButtonText = "Publish First Exhibit",
+                                    onActionClick = onOpenCreatePost
+                                )
                             }
                         } else {
                             items(feedState.data, key = { it.postId }) { post ->
@@ -495,11 +479,11 @@ fun HomeFeedScreen(
             }
         }
 
-        // Floating Circular "+" FAB positioned comfortably above the bottom navigation bar
+        // Floating Circular FAB with candy sticker
         FloatingActionButton(
             onClick = onOpenCreatePost,
             shape = CircleShape,
-            containerColor = colors.pillSelectedFill,
+            containerColor = colors.autumnPrimary,
             contentColor = Color.White,
             elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 5.dp),
             modifier = Modifier
@@ -508,13 +492,14 @@ fun HomeFeedScreen(
                     end = if (dimens.isCompact) 14.dp else 20.dp,
                     bottom = if (dimens.isCompact) 16.dp else 22.dp
                 )
-                .size(if (dimens.isCompact) 46.dp else 54.dp)
+                .size(if (dimens.isCompact) 48.dp else 56.dp)
                 .testTag("fab_create_post")
         ) {
-            Icon(
-                imageVector = Icons.Filled.Add,
+            Sticker(
+                drawableRes = R.drawable.st_candy,
                 contentDescription = "Create post",
-                modifier = Modifier.size(if (dimens.isCompact) 22.dp else 28.dp)
+                size = if (dimens.isCompact) 28.dp else 34.dp,
+                enableWobble = true
             )
         }
     }
@@ -554,6 +539,7 @@ fun PostDetailScreen(
             .fillMaxSize()
             .background(colors.background)
     ) {
+        PaperBackgroundOverlay(opacity = 0.10f)
         Column(
             modifier = Modifier
                 .fillMaxSize()

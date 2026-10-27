@@ -116,6 +116,10 @@ import com.example.ui.theme.ArtmuseumShapeTokens
 import com.example.ui.theme.LocalArtmuseumColors
 import com.example.ui.theme.LocalArtmuseumDimensions
 import com.example.ui.theme.PlayfairDisplayFontFamily
+import com.example.ui.components.ArtmuseumScrapbookEmptyState
+import com.example.ui.components.PaperBackgroundOverlay
+import com.example.ui.components.Sticker
+import com.example.ui.theme.CaveatFontFamily
 import com.example.ui.theme.WarmPaper
 import com.example.ui.viewmodel.ArtmuseumViewModel
 import java.util.Locale
@@ -482,22 +486,38 @@ fun ProfileScreen(
                     .fillMaxWidth()
                     .padding(horizontal = 22.dp)
             ) {
-                // Name + Verified Checkmark
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center
+                // Name + Verified Checkmark with nametag sticker behind
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier.padding(vertical = 4.dp)
                 ) {
-                    Text(
-                        text = currentProfile.displayName,
-                        style = MaterialTheme.typography.headlineLarge.copy(
-                            fontFamily = PlayfairDisplayFontFamily,
-                            fontWeight = FontWeight.Medium,
-                            fontSize = 24.sp
-                        ),
-                        color = colors.inkPrimary
+                    // Nametag sticker behind the username
+                    Image(
+                        painter = painterResource(id = R.drawable.st_nametag),
+                        contentDescription = "Nametag sticker",
+                        contentScale = ContentScale.FillBounds,
+                        modifier = Modifier
+                            .width(220.dp)
+                            .height(58.dp)
+                            .clip(RoundedCornerShape(12.dp))
                     )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    VerifiedMuseumBadge()
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center,
+                        modifier = Modifier.padding(start = 28.dp, end = 12.dp, top = 4.dp, bottom = 4.dp)
+                    ) {
+                        Text(
+                            text = currentProfile.displayName,
+                            style = MaterialTheme.typography.headlineLarge.copy(
+                                fontFamily = CaveatFontFamily,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 24.sp
+                            ),
+                            color = colors.inkPrimary
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        VerifiedMuseumBadge()
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(4.dp))
@@ -744,23 +764,13 @@ fun ProfileScreen(
 
                 // 2x2 Rounded Artwork Grid (Matches Screen 5 of mockup)
                 if (displayedGridPosts.isEmpty()) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 32.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = if (selectedSegment == 0) {
-                                "No published exhibits yet."
-                            } else {
-                                "No saved exhibits yet. Tap the bookmark pill on any exhibit to save it."
-                            },
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = colors.mutedText,
-                            textAlign = TextAlign.Center
-                        )
-                    }
+                    val isSaved = selectedSegment == 1
+                    ArtmuseumScrapbookEmptyState(
+                        title = if (isSaved) "No Saved Exhibits Yet" else "No Published Exhibits Yet",
+                        message = if (isSaved) "Tap the bookmark pill on any exhibit to pin it into your cozy scrapbook." else "Share your first painting, photo, or thoughts with fellow visitors.",
+                        useJamSticker = isSaved,
+                        useCharacter = !isSaved
+                    )
                 } else {
                     val rows = displayedGridPosts.chunked(2)
                     Column(
@@ -1606,17 +1616,26 @@ fun ExploreScreen(
                         contentAlignment = Alignment.Center
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            ArtmuseumOliveEmblem(size = 40.dp)
+                            Sticker(
+                                drawableRes = R.drawable.st_camera,
+                                size = 64.dp,
+                                rotation = -6f,
+                                enableWobble = true
+                            )
                             Spacer(modifier = Modifier.height(12.dp))
                             Text(
-                                text = if (searchQuery.isNotBlank()) "No exhibits matching \"$searchQuery\"" else "No exhibits published in this category yet",
-                                style = MaterialTheme.typography.titleMedium,
+                                text = if (searchQuery.isNotBlank()) "No exhibits matching \"$searchQuery\"" else "No exhibits in this theme yet",
+                                style = MaterialTheme.typography.titleLarge.copy(
+                                    fontFamily = CaveatFontFamily,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 22.sp
+                                ),
                                 color = colors.inkPrimary,
                                 textAlign = TextAlign.Center
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = "Try searching for a different keyword or explore all themes.",
+                                text = "Try searching for a different keyword or explore our cozy autumn categories.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = colors.mutedText,
                                 textAlign = TextAlign.Center
@@ -1747,11 +1766,10 @@ fun NotificationsBottomSheet(
             )
             Spacer(modifier = Modifier.height(12.dp))
             if (notifications.isEmpty()) {
-                Text(
-                    text = "No activity notifications yet.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = colors.mutedText,
-                    modifier = Modifier.padding(vertical = 24.dp)
+                ArtmuseumScrapbookEmptyState(
+                    title = "All Quiet in the Gallery",
+                    message = "When other visitors like your exhibits or leave reflections, you'll find them here.",
+                    useJamSticker = true
                 )
             } else {
                 notifications.forEach { item ->

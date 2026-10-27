@@ -77,7 +77,10 @@ import com.example.data.model.DirectChatMessage
 import com.example.ui.components.ArtmuseumArtworkImage
 import com.example.ui.components.ArtmuseumAvatar
 import com.example.ui.components.ArtmuseumIconButton
+import com.example.ui.components.ArtmuseumScrapbookEmptyState
+import com.example.ui.components.PaperBackgroundOverlay
 import com.example.ui.theme.ArtmuseumShapeTokens
+import com.example.ui.theme.CaveatFontFamily
 import com.example.ui.theme.HeartCrimson
 import com.example.ui.theme.LocalArtmuseumColors
 import com.example.ui.theme.PlayfairDisplayFontFamily
@@ -118,6 +121,7 @@ fun DirectMessagesListScreen(
             .fillMaxSize()
             .background(colors.background)
     ) {
+        PaperBackgroundOverlay(opacity = 0.10f)
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -283,26 +287,12 @@ fun DirectMessagesListScreen(
                         .padding(32.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(
-                            imageVector = Icons.Outlined.ChatBubbleOutline,
-                            contentDescription = null,
-                            tint = colors.mutedText,
-                            modifier = Modifier.size(48.dp)
-                        )
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Text(
-                            text = if (query.isNotBlank()) "No conversations match '$query'" else "No messages yet",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = colors.inkPrimary
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = "Tap on any community curator above to start a direct reflection.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = colors.mutedText
-                        )
-                    }
+                    ArtmuseumScrapbookEmptyState(
+                        title = if (query.isNotBlank()) "No Conversations Match" else "No Direct Messages Yet",
+                        message = if (query.isNotBlank()) "No conversations match '$query'. Try another name." else "Tap any community curator above to start a cozy direct chat.",
+                        useJamSticker = false,
+                        useCharacter = false
+                    )
                 }
             } else {
                 LazyColumn(
@@ -498,6 +488,7 @@ fun ChatConversationScreen(
             .fillMaxSize()
             .background(colors.background)
     ) {
+        PaperBackgroundOverlay(opacity = 0.10f)
         Column(
             modifier = Modifier
                 .fillMaxSize()

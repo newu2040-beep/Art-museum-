@@ -22,6 +22,7 @@ import com.example.data.model.ArtmuseumThemePalette
 object ArtmuseumShapeTokens {
     val Pill = CircleShape
     val SmallRounded = RoundedCornerShape(12.dp)
+    val Button = RoundedCornerShape(16.dp)
     val ArtworkFrame = RoundedCornerShape(18.dp)
     val Card = RoundedCornerShape(20.dp)
     val LargeSheetTop = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
@@ -40,7 +41,7 @@ data class ArtmuseumDimensions(
     val isVerySmall: Boolean = false,
     val horizontalPadding: Dp = 18.dp,
     val topBarHeight: Dp = 56.dp,
-    val headerTitleSize: TextUnit = 22.sp,
+    val headerTitleSize: TextUnit = 24.sp,
     val bannerHeight: Dp = 195.dp,
     val cardPadding: Dp = 16.dp,
     val cardArtworkHeight: Dp = 250.dp,
@@ -59,18 +60,23 @@ val LocalArtmuseumDimensions = staticCompositionLocalOf { ArtmuseumDimensions() 
 
 data class ArtmuseumExtendedColors(
     val palette: ArtmuseumThemePalette = ArtmuseumThemePalette.CREAM,
-    val background: Color = MuseumCream,
-    val cardSurface: Color = WarmPaper,
-    val subtleSurface: Color = WarmPaperSubtle,
-    val pillSelectedFill: Color = OlivePillActive,
-    val pillSelectedText: Color = Color.White,
-    val pillUnselectedFill: Color = WarmPaperSubtle,
-    val pillUnselectedText: Color = InkPrimary,
-    val navActivePill: Color = NavPillBrown,
-    val inkPrimary: Color = InkPrimary,
-    val mutedText: Color = MutedTaupe,
-    val border: Color = MuseumBorder,
-    val heartColor: Color = HeartCrimson
+    val background: Color = AutumnCream,
+    val cardSurface: Color = AutumnCream,
+    val subtleSurface: Color = AutumnTan,
+    val pillSelectedFill: Color = AutumnPumpkin,
+    val pillSelectedText: Color = AutumnCream,
+    val pillUnselectedFill: Color = AutumnTan.copy(alpha = 0.55f),
+    val pillUnselectedText: Color = AutumnChocolate,
+    val navActivePill: Color = AutumnPumpkin,
+    val inkPrimary: Color = AutumnChocolate,
+    val mutedText: Color = Color(0xFF7A5C4D),
+    val border: Color = AutumnChocolate,
+    val heartColor: Color = AutumnRust,
+    val autumnPrimary: Color = AutumnPumpkin,
+    val autumnSecondary: Color = AutumnOlive,
+    val autumnContainer: Color = AutumnTan,
+    val autumnRust: Color = AutumnRust,
+    val autumnCream: Color = AutumnCream
 )
 
 val LocalArtmuseumColors = staticCompositionLocalOf { ArtmuseumExtendedColors() }
@@ -95,7 +101,7 @@ fun MyApplicationTheme(
                 isVerySmall = true,
                 horizontalPadding = 12.dp,
                 topBarHeight = 44.dp,
-                headerTitleSize = 18.sp,
+                headerTitleSize = 19.sp,
                 bannerHeight = 130.dp,
                 cardPadding = 10.dp,
                 cardArtworkHeight = 175.dp,
@@ -115,7 +121,7 @@ fun MyApplicationTheme(
                 isVerySmall = false,
                 horizontalPadding = 14.dp,
                 topBarHeight = 50.dp,
-                headerTitleSize = 19.5.sp,
+                headerTitleSize = 21.sp,
                 bannerHeight = 150.dp,
                 cardPadding = 12.dp,
                 cardArtworkHeight = 205.dp,
@@ -135,7 +141,7 @@ fun MyApplicationTheme(
                 isVerySmall = false,
                 horizontalPadding = 18.dp,
                 topBarHeight = 56.dp,
-                headerTitleSize = 22.sp,
+                headerTitleSize = 24.sp,
                 bannerHeight = 195.dp,
                 cardPadding = 16.dp,
                 cardArtworkHeight = 250.dp,
@@ -153,25 +159,24 @@ fun MyApplicationTheme(
     }
 
     val useDark = palette.isDark || darkTheme
-    val bg = Color(palette.primaryBackgroundHex)
-    val card = Color(palette.cardSurfaceHex)
-    val subtle = Color(palette.subtleSurfaceHex)
-    val primaryAccent = Color(palette.accentHex)
-    val pillFill = Color(palette.chipFillHex)
-    val navPill = Color(palette.navActivePillHex)
-    val border = Color(palette.borderHex)
+    val bg = if (useDark) AutumnChocolate else AutumnCream
+    val card = if (useDark) Color(0xFF452414) else AutumnCream
+    val subtle = if (useDark) Color(0xFF6B432E) else AutumnTan
+    val primaryAccent = AutumnPumpkin
+    val pillFill = AutumnOlive
+    val navPill = AutumnPumpkin
+    val border = AutumnChocolate
 
-    // Bold, crisp Apple-style high contrast typography ink
-    val ink = if (useDark) Color(0xFFF7F9FA) else Color(0xFF181A1C)
-    val muted = if (useDark) Color(0xFFA1ACB4) else Color(0xFF6B7280)
+    val ink = if (useDark) AutumnCream else AutumnChocolate
+    val muted = if (useDark) AutumnTan else Color(0xFF7A5C4D)
 
     val colorScheme = if (useDark) {
         darkColorScheme(
             primary = primaryAccent,
-            onPrimary = Color(0xFF101214),
+            onPrimary = AutumnCream,
             secondary = pillFill,
-            onSecondary = Color(0xFF101214),
-            tertiary = primaryAccent,
+            onSecondary = AutumnCream,
+            tertiary = AutumnRust,
             background = bg,
             onBackground = ink,
             surface = card,
@@ -183,10 +188,10 @@ fun MyApplicationTheme(
     } else {
         lightColorScheme(
             primary = primaryAccent,
-            onPrimary = Color.White,
+            onPrimary = AutumnCream,
             secondary = pillFill,
-            onSecondary = Color.White,
-            tertiary = primaryAccent,
+            onSecondary = AutumnCream,
+            tertiary = AutumnRust,
             background = bg,
             onBackground = ink,
             surface = card,
@@ -202,15 +207,20 @@ fun MyApplicationTheme(
         background = bg,
         cardSurface = card,
         subtleSurface = subtle,
-        pillSelectedFill = pillFill,
-        pillSelectedText = Color.White,
-        pillUnselectedFill = subtle,
+        pillSelectedFill = primaryAccent,
+        pillSelectedText = AutumnCream,
+        pillUnselectedFill = subtle.copy(alpha = 0.5f),
         pillUnselectedText = ink,
         navActivePill = navPill,
         inkPrimary = ink,
         mutedText = muted,
         border = border,
-        heartColor = HeartCrimson
+        heartColor = AutumnRust,
+        autumnPrimary = AutumnPumpkin,
+        autumnSecondary = AutumnOlive,
+        autumnContainer = AutumnTan,
+        autumnRust = AutumnRust,
+        autumnCream = AutumnCream
     )
 
     CompositionLocalProvider(
@@ -225,4 +235,3 @@ fun MyApplicationTheme(
         )
     }
 }
-

@@ -2,13 +2,21 @@ package com.example.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
+// Autumn Cozy Scrapbook Palette
+val AutumnCream = Color(0xFFF6F1E7)
+val AutumnPumpkin = Color(0xFFE8782A)
+val AutumnChocolate = Color(0xFF5A3320)
+val AutumnOlive = Color(0xFF7A7438)
+val AutumnTan = Color(0xFFD9B77E)
+val AutumnRust = Color(0xFFB5482A)
+
 // Core Artmuseum Palette (PRD Section 9 & Mockup)
-val MuseumCream = Color(0xFFF7F2E8)
-val MuseumCreamElevated = Color(0xFFF1EADF)
-val WarmPaper = Color(0xFFFFFDF8)
-val WarmPaperSubtle = Color(0xFFF5EFE4)
-val MuseumBorder = Color(0xFFE6DEC8)
-val MuseumDivider = Color(0xFFEBE4D6)
+val MuseumCream = Color(0xFFF6F1E7)
+val MuseumCreamElevated = Color(0xFFEFE8D8)
+val WarmPaper = Color(0xFFF6F1E7)
+val WarmPaperSubtle = Color(0xFFEFE8D8)
+val MuseumBorder = Color(0xFF5A3320)
+val MuseumDivider = Color(0xFFD9B77E)
 
 val InkPrimary = Color(0xFF29251F)
 val MutedTaupe = Color(0xFF81786D)
