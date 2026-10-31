@@ -84,7 +84,7 @@ val LocalArtmuseumColors = staticCompositionLocalOf { ArtmuseumExtendedColors() 
 @Composable
 fun MyApplicationTheme(
     palette: ArtmuseumThemePalette = ArtmuseumThemePalette.CREAM,
-    darkTheme: Boolean = isSystemInDarkTheme() || palette.isDark,
+    darkTheme: Boolean = palette.isDark,
     forceCompact: Boolean = false,
     content: @Composable () -> Unit
 ) {

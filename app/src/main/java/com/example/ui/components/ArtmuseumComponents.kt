@@ -402,11 +402,11 @@ fun ArtmuseumFilterChip(
 ) {
     val colors = LocalArtmuseumColors.current
     val bgColor by animateColorAsState(
-        targetValue = if (selected) colors.pillSelectedFill else colors.subtleSurface,
+        targetValue = if (selected) colors.autumnPrimary else colors.autumnSecondary,
         label = "filterChipBg"
     )
     val textColor by animateColorAsState(
-        targetValue = if (selected) colors.pillSelectedText else colors.inkPrimary.copy(alpha = 0.85f),
+        targetValue = colors.autumnCream,
         label = "filterChipText"
     )
 
@@ -414,7 +414,7 @@ fun ArtmuseumFilterChip(
         onClick = onClick,
         shape = ArtmuseumShapeTokens.Pill,
         color = bgColor,
-        border = if (selected) null else BorderStroke(0.8.dp, colors.border.copy(alpha = 0.85f)),
+        border = BorderStroke(if (selected) 1.2.dp else 0.8.dp, colors.border),
         modifier = modifier
             .height(36.dp)
             .then(if (testTag != null) Modifier.testTag(testTag) else Modifier)
@@ -426,7 +426,7 @@ fun ArtmuseumFilterChip(
             Text(
                 text = label,
                 style = MaterialTheme.typography.labelLarge.copy(
-                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
                     fontSize = 13.sp
                 ),
                 color = textColor
@@ -445,11 +445,11 @@ fun ArtmuseumTopicChip(
 ) {
     val colors = LocalArtmuseumColors.current
     val bgColor by animateColorAsState(
-        targetValue = if (selected) colors.pillSelectedFill else colors.subtleSurface,
+        targetValue = if (selected) colors.autumnPrimary else colors.autumnSecondary,
         label = "topicChipBg"
     )
     val contentColor by animateColorAsState(
-        targetValue = if (selected) colors.pillSelectedText else colors.inkPrimary.copy(alpha = 0.82f),
+        targetValue = colors.autumnCream,
         label = "topicChipContent"
     )
 
@@ -457,7 +457,7 @@ fun ArtmuseumTopicChip(
         onClick = onClick,
         shape = ArtmuseumShapeTokens.Pill,
         color = bgColor,
-        border = if (selected) null else BorderStroke(0.8.dp, colors.border),
+        border = BorderStroke(if (selected) 1.2.dp else 0.8.dp, colors.border),
         modifier = modifier
             .height(34.dp)
             .then(if (testTag != null) Modifier.testTag(testTag) else Modifier)
@@ -479,7 +479,7 @@ fun ArtmuseumTopicChip(
             Text(
                 text = label,
                 style = MaterialTheme.typography.labelMedium.copy(
-                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
                     fontSize = 12.5.sp
                 ),
                 color = contentColor

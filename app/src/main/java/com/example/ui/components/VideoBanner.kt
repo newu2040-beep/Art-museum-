@@ -86,35 +86,58 @@ fun VideoBanner(
         }
     }
 
-    Surface(
-        shape = shape,
-        color = colors.cardSurface,
-        border = BorderStroke(0.6.dp, colors.border),
-        shadowElevation = 1.5.dp,
-        modifier = modifier
-            .fillMaxWidth()
-            .height(effectiveHeight)
-            .testTag("home_video_banner")
+    Box(
+        modifier = modifier.fillMaxWidth()
     ) {
-        Box(
+        Surface(
+            shape = shape,
+            color = colors.cardSurface,
+            border = BorderStroke(0.8.dp, colors.border),
+            shadowElevation = 2.dp,
             modifier = Modifier
-                .fillMaxSize()
-                .clip(shape)
+                .fillMaxWidth()
+                .height(effectiveHeight)
+                .testTag("home_video_banner")
         ) {
-            AndroidView(
-                factory = { ctx ->
-                    PlayerView(ctx).apply {
-                        player = exoPlayer
-                        useController = false
-                        resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
-                        layoutParams = FrameLayout.LayoutParams(
-                            ViewGroup.LayoutParams.MATCH_PARENT,
-                            ViewGroup.LayoutParams.MATCH_PARENT
-                        )
-                    }
-                },
-                modifier = Modifier.fillMaxSize()
-            )
+            androidx.compose.foundation.layout.Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(shape)
+            ) {
+                PlaidCardHeader(
+                    height = 12.dp,
+                    cornerRadius = if (dimens.isCompact) 14.dp else cornerRadius
+                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                ) {
+                    AndroidView(
+                        factory = { ctx ->
+                            PlayerView(ctx).apply {
+                                player = exoPlayer
+                                useController = false
+                                resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                                layoutParams = FrameLayout.LayoutParams(
+                                    ViewGroup.LayoutParams.MATCH_PARENT,
+                                    ViewGroup.LayoutParams.MATCH_PARENT
+                                )
+                            }
+                        },
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+            }
         }
+        Sticker(
+            drawableRes = R.drawable.st_bow,
+            size = 34.dp,
+            rotation = 10f,
+            enableWobble = true,
+            modifier = Modifier
+                .align( androidx.compose.ui.Alignment.TopEnd)
+                .then(androidx.compose.ui.Modifier)
+        )
     }
 }

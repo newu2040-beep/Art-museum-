@@ -117,7 +117,9 @@ import com.example.ui.theme.LocalArtmuseumColors
 import com.example.ui.theme.LocalArtmuseumDimensions
 import com.example.ui.theme.PlayfairDisplayFontFamily
 import com.example.ui.components.ArtmuseumScrapbookEmptyState
+import com.example.ui.components.CornerPumpkin
 import com.example.ui.components.PaperBackgroundOverlay
+import com.example.ui.components.ScatteredDoodlesBackground
 import com.example.ui.components.Sticker
 import com.example.ui.theme.CaveatFontFamily
 import com.example.ui.theme.WarmPaper
@@ -260,17 +262,24 @@ fun ProfileScreen(
     val headerTotalHeight = if (dimens.isCompact) 220.dp else 260.dp
     val bannerArtworkHeight = if (dimens.isCompact) 160.dp else 200.dp
 
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxSize()
             .background(colors.background)
-            .verticalScroll(rememberScrollState())
-            .padding(bottom = 96.dp)
     ) {
-        // Top Banner + Avatar Header
-        Box(
+        PaperBackgroundOverlay(opacity = 0.12f)
+        ScatteredDoodlesBackground()
+
+        Column(
             modifier = Modifier
-                .fillMaxWidth()
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(bottom = 96.dp)
+        ) {
+            // Top Banner + Avatar Header
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
                 .height(headerTotalHeight)
         ) {
             // High-quality customizable botanical/artistic profile banner
@@ -477,7 +486,7 @@ fun ProfileScreen(
 
         // Main Profile Content Surface (Clean hierarchy with no overlapping)
         Surface(
-            color = colors.cardSurface,
+            color = Color.Transparent,
             modifier = Modifier.fillMaxWidth()
         ) {
             Column(
@@ -810,6 +819,7 @@ fun ProfileScreen(
                 Spacer(modifier = Modifier.height(24.dp))
             }
         }
+    }
     }
 
     if (showEditProfileSheet) {
@@ -1482,26 +1492,49 @@ fun ExploreScreen(
         }
     }
 
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxSize()
             .background(colors.background)
-            .statusBarsPadding()
     ) {
-        Column(modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp)) {
-            Text(
-                text = "Explore Museum",
-                style = MaterialTheme.typography.headlineLarge.copy(
-                    fontFamily = PlayfairDisplayFontFamily
-                ),
-                color = colors.inkPrimary
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = "Discover perspectives, themes, and fellow storytellers",
-                style = MaterialTheme.typography.bodySmall,
-                color = colors.mutedText
-            )
+        PaperBackgroundOverlay(opacity = 0.12f)
+        CornerPumpkin(
+            modifier = Modifier.align(Alignment.TopStart),
+            size = 95.dp,
+            alignment = Alignment.TopStart
+        )
+        ScatteredDoodlesBackground()
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .statusBarsPadding()
+        ) {
+            Column(modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Sticker(
+                        drawableRes = R.drawable.st_star_yellow,
+                        size = 30.dp,
+                        rotation = -12f,
+                        enableWobble = true
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Explore Museum",
+                        style = MaterialTheme.typography.headlineLarge.copy(
+                            fontFamily = CaveatFontFamily,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 30.sp
+                        ),
+                        color = colors.inkPrimary
+                    )
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Discover perspectives, themes, and fellow storytellers",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.mutedText
+                )
             Spacer(modifier = Modifier.height(12.dp))
             ArtmuseumSearchField(
                 value = searchQuery,
@@ -1647,6 +1680,7 @@ fun ExploreScreen(
         }
     }
 }
+}
 
 @Composable
 fun SavedPostsScreen(
@@ -1665,75 +1699,84 @@ fun SavedPostsScreen(
         allPosts.filter { it.postId in savedPostIds }
     }
 
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxSize()
             .background(colors.background)
-            .statusBarsPadding()
     ) {
-        Column(modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp)) {
-            Text(
-                text = "Saved Collection",
-                style = MaterialTheme.typography.headlineLarge.copy(
-                    fontFamily = PlayfairDisplayFontFamily
-                ),
-                color = colors.inkPrimary
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = "Exhibits and reflections bookmarked to your personal archive",
-                style = MaterialTheme.typography.bodySmall,
-                color = colors.mutedText
-            )
-        }
+        PaperBackgroundOverlay(opacity = 0.12f)
+        ScatteredDoodlesBackground()
 
-        if (savedPosts.isEmpty()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(32.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    ArtmuseumOliveEmblem(size = 48.dp)
-                    Spacer(modifier = Modifier.height(12.dp))
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .statusBarsPadding()
+        ) {
+            Column(modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Sticker(
+                        drawableRes = R.drawable.st_jam,
+                        size = 30.dp,
+                        rotation = -8f,
+                        enableWobble = true
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "Your Saved Archive is Quiet",
-                        style = MaterialTheme.typography.titleLarge,
+                        text = "Saved Collection",
+                        style = MaterialTheme.typography.headlineLarge.copy(
+                            fontFamily = CaveatFontFamily,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 30.sp
+                        ),
                         color = colors.inkPrimary
                     )
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text(
-                        text = "Tap the bookmark pill on any exhibit in the feed to keep it here across sessions.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = colors.mutedText,
-                        textAlign = TextAlign.Center
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Exhibits and reflections bookmarked to your cozy personal archive",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.mutedText
+                )
+            }
+
+            if (savedPosts.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(24.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    ArtmuseumScrapbookEmptyState(
+                        title = "Your Saved Scrapbook is Quiet",
+                        message = "Tap the bookmark pill on any exhibit in the feed to keep it pinned here across sessions.",
+                        useJamSticker = true,
+                        useCharacter = false
                     )
                 }
-            }
-        } else {
-            LazyColumn(
-                contentPadding = PaddingValues(
-                    start = 16.dp,
-                    end = 16.dp,
-                    top = 6.dp,
-                    bottom = 96.dp
-                ),
-                verticalArrangement = Arrangement.spacedBy(14.dp),
-                modifier = Modifier.fillMaxSize()
-            ) {
-                items(savedPosts, key = { it.postId }) { post ->
-                    ArtmuseumPostCard(
-                        post = post,
-                        isLiked = post.postId in likedPostIds,
-                        isSaved = true,
-                        onCardClick = { onOpenPostDetail(post) },
-                        onLikeClick = { onToggleLike(post) },
-                        onSaveClick = { onToggleSave(post.postId) },
-                        onShareClick = {},
-                        onMoreClick = { onOpenPostDetail(post) },
-                        onAuthorClick = { onOpenPostDetail(post) }
-                    )
+            } else {
+                LazyColumn(
+                    contentPadding = PaddingValues(
+                        start = 16.dp,
+                        end = 16.dp,
+                        top = 6.dp,
+                        bottom = 96.dp
+                    ),
+                    verticalArrangement = Arrangement.spacedBy(14.dp),
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    items(savedPosts, key = { it.postId }) { post ->
+                        ArtmuseumPostCard(
+                            post = post,
+                            isLiked = post.postId in likedPostIds,
+                            isSaved = true,
+                            onCardClick = { onOpenPostDetail(post) },
+                            onLikeClick = { onToggleLike(post) },
+                            onSaveClick = { onToggleSave(post.postId) },
+                            onShareClick = {},
+                            onMoreClick = { onOpenPostDetail(post) },
+                            onAuthorClick = { onOpenPostDetail(post) }
+                        )
+                    }
                 }
             }
         }
